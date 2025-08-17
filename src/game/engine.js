@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import * as exitCmd from "../commands/exit.js";
+import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
 import * as resetCmd from "../commands/reset.js";
 import * as skipCmd from "../commands/skip.js";
@@ -12,6 +13,7 @@ const commands = {
   reset: resetCmd,
   exit: exitCmd,
   skip: skipCmd,
+  move: moveCmd,
 };
 
 async function loadUser(userId) {
@@ -93,6 +95,16 @@ export async function handleIncoming({ jid, from, text }) {
         : game.ui?.templates?.unknownCommandDuringIntro ||
           "Finish the introduction first. Type */next* or */reset*.";
       await sendText(jid, msg);
+      return;
+    }
+  } else {
+    // When not in sequence, allow /move as valid command
+    const allowed = new Set(Object.keys(commands));
+    if (isCmd && !allowed.has(cmd)) {
+      await sendText(
+        jid,
+        game.ui?.templates?.unknownCommandGeneric || "Unknown command."
+      );
       return;
     }
   }

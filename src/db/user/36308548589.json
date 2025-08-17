@@ -18,9 +18,9 @@
     "1000": {
       "chapter": 0,
       "step": 0,
-      "location": "office",
-      "inStructure": true,
-      "structureId": "office",
+      "location": "3,3",
+      "inStructure": false,
+      "structureId": null,
       "roomId": null,
       "inventory": [],
       "visitedLocations": [],
