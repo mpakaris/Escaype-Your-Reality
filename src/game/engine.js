@@ -6,6 +6,7 @@ import * as lookCmd from "../commands/look.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
 import * as resetCmd from "../commands/reset.js";
+import * as searchCmd from "../commands/search.js";
 import * as skipCmd from "../commands/skip.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
@@ -18,6 +19,8 @@ const commands = {
   move: moveCmd,
   enter: enterCmd,
   look: lookCmd,
+  search: searchCmd,
+  check: searchCmd,
 };
 
 async function loadUser(userId) {
