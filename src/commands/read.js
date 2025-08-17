@@ -117,6 +117,15 @@ export async function run({ jid, user, game, state, args }) {
     "";
   const text = renderTokens(raw);
 
+  // If text is empty or only whitespace, send not-readable template and return
+  if (!text || String(text).trim().length === 0) {
+    const nopeTpl =
+      game.ui?.templates?.readNotReadable ||
+      "You squint at *{item}*, but there’s nothing to read.";
+    await sendText(jid, nopeTpl.replace("{item}", label));
+    return;
+  }
+
   const hdr = game.ui?.templates?.readHeader;
   if (hdr) await sendText(jid, hdr.replace("{item}", label));
   await sendText(jid, text);

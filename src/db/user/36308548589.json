@@ -18,14 +18,17 @@
     "1000": {
       "chapter": 0,
       "step": 0,
-      "location": "1,1",
+      "location": "2,2",
       "inStructure": true,
-      "structureId": "apartment_unit",
-      "roomId": "living_room",
+      "structureId": "branch_floor",
+      "roomId": "vault",
       "inventory": [
         "restaurant_receipt",
         "usb_hint_note",
-        "safe_key"
+        "safe_key",
+        "usb_drive",
+        "draft_print",
+        "restaurant_card"
       ],
       "visitedLocations": [],
       "flags": {
@@ -46,6 +49,12 @@
         "type": null,
         "seq": 0,
         "step": 0
+      },
+      "objects": {
+        "deposit_box_42": {
+          "locked": false,
+          "opened": true
+        }
       }
     }
   },

@@ -29,6 +29,15 @@ function itemDisplay(game, id) {
   return def?.displayName || def?.name || id;
 }
 
+function ensureObjectState(state) {
+  if (!state.objects || typeof state.objects !== "object") state.objects = {};
+  return state.objects;
+}
+function getObjState(state, objId) {
+  ensureObjectState(state);
+  return state.objects[objId] || {};
+}
+
 export async function run({ jid, user, game, state, args }) {
   // Must be inside a structure per design
   if (!state.inStructure || !state.structureId) {
@@ -56,9 +65,14 @@ export async function run({ jid, user, game, state, args }) {
 
   const fromObjects = [];
   for (const o of objects) {
-    const locked = !!(o.lock && o.lock.locked);
+    const lock = o.lock || {};
+    const oState = getObjState(state, o.id);
+    const locked =
+      typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
     const openable = (o.tags || []).includes("openable");
-    const opened = o.states?.opened === true;
+    const openedBase = o.states?.opened === true;
+    const opened =
+      typeof oState.opened === "boolean" ? oState.opened : openedBase;
     if (locked) continue;
     if (openable && !opened) continue; // closed container, don’t expose contents
     if (Array.isArray(o.contents)) fromObjects.push(...o.contents);

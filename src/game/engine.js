@@ -1,16 +1,18 @@
 import { promises as fs } from "fs";
 import path from "path";
+import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
 import * as exitCmd from "../commands/exit.js";
 import * as inventoryCmd from "../commands/inventory.js";
 import * as lookCmd from "../commands/look.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
+import * as readCmd from "../commands/read.js";
 import * as resetCmd from "../commands/reset.js";
 import * as searchCmd from "../commands/search.js";
 import * as skipCmd from "../commands/skip.js";
 import * as takeCmd from "../commands/take.js";
-import * as readCmd from "../commands/read.js";
+import * as useCmd from "../commands/use.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
 
@@ -27,6 +29,8 @@ const commands = {
   take: takeCmd,
   inventory: inventoryCmd,
   read: readCmd,
+  drop: dropCmd,
+  use: useCmd,
 };
 
 async function loadUser(userId) {

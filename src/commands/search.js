@@ -1,6 +1,16 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
+// Per-user object state helpers
+function ensureObjectState(state) {
+  if (!state.objects || typeof state.objects !== "object") state.objects = {};
+  return state.objects;
+}
+function getObjState(state, objId) {
+  ensureObjectState(state);
+  return state.objects[objId] || {};
+}
+
 const bullets = (arr) =>
   (arr || [])
     .filter(Boolean)
@@ -75,13 +85,15 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Lock logic
-  const lock = obj.lock;
-  if (lock?.locked) {
+  // Effective lock/open state with per-user overrides
+  const lock = obj.lock || {};
+  const oState = getObjState(state, obj.id);
+  const isLocked =
+    typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+  if (isLocked) {
     const name = obj.displayName || obj.id;
     let hint = lock.lockedHint || "";
     if (hint) {
-      // Strip a leading “(It’s) locked.” in the hint to avoid repetition
       hint = String(hint)
         .replace(/^\s*(it['’]?s locked|locked)\.?\s*/i, "")
         .trim();
@@ -102,7 +114,9 @@ export async function run({ jid, user, game, state, args }) {
 
   // Openable but not opened yet → don’t reveal contents
   const isOpenable = (obj.tags || []).includes("openable");
-  const isOpened = obj.states?.opened === true;
+  const isOpenedBase = obj.states?.opened === true;
+  const isOpened =
+    typeof oState.opened === "boolean" ? oState.opened : isOpenedBase;
   if (isOpenable && !isOpened) {
     const lastWord = String(obj.displayName || obj.id)
       .split(/\s+/)
