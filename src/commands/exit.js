@@ -3,38 +3,11 @@ import { resolveMedia } from "../services/renderer.js";
 import { sendImage, sendText } from "../services/whinself.js";
 
 function getSequences(game, type) {
-  if (type === "intro") return game.introSequences || [];
   const buckets = game.sequences || {};
   return buckets[type] || [];
 }
 
-export async function run({ jid, user, game, state }) {
-  if (!state.flow?.active || state.flow.type !== "intro") {
-    await sendText(jid, "You are already in the game.");
-    return;
-  }
-  const sequences = getSequences(game, "intro");
-  const atEnd = state.flow.seq >= sequences.length;
-  if (!atEnd) {
-    await sendText(jid, "Finish the introduction first. Use /next.");
-    return;
-  }
-
-  endSequence(state);
-  state.flags = state.flags || {};
-  state.flags.introSequenceSeen = true;
-
-  const start = game.special?.start;
-  if (start) {
-    state.location = start.place || null;
-    state.inStructure = !!start.inStructure;
-    state.structureId = start.inStructure ? start.place : null;
-    if (typeof start.pendingChapterOnExit === "number")
-      state.chapter = start.pendingChapterOnExit - 1;
-  }
-
-  await sendText(jid, "Intro complete. The case begins.");
-
+async function sendExitToStreetSet(jid, game) {
   // show exit image if defined
   const onExitBo = game.media?.onExitBo;
   if (onExitBo?.type === "image") {
@@ -75,5 +48,45 @@ export async function run({ jid, user, game, state }) {
   }
 
   // fallback
+  await sendText(jid, game.ui?.templates?.whereToNext || "Where to next?");
+}
+
+export async function run({ jid, user, game, state }) {
+  // MODE 1: if intro sequence is active, /exit finishes intro at the end only
+  if (state.flow?.active && state.flow.type === "intro") {
+    const sequences = getSequences(game, "intro");
+    const atEnd = (state.flow.seq || 0) >= sequences.length;
+    if (!atEnd) {
+      await sendText(jid, "Finish the introduction first. Use /next.");
+      return;
+    }
+
+    endSequence(state);
+    state.flags = state.flags || {};
+    state.flags.introSequenceSeen = true;
+
+    const start = game.special?.start;
+    if (start) {
+      state.location = start.place || null;
+      state.inStructure = !!start.inStructure;
+      state.structureId = start.inStructure ? start.place : null;
+      if (typeof start.pendingChapterOnExit === "number")
+        state.chapter = start.pendingChapterOnExit - 1;
+    }
+
+    await sendExitToStreetSet(jid, game);
+    return;
+  }
+
+  // MODE 2: if already inside a structure, /exit returns to the street (same intersection)
+  if (state.inStructure) {
+    state.inStructure = false;
+    state.structureId = null;
+    state.roomId = null;
+    await sendExitToStreetSet(jid, game);
+    return;
+  }
+
+  // Otherwise nothing to exit
   await sendText(jid, game.ui?.templates?.whereToNext || "Where to next?");
 }

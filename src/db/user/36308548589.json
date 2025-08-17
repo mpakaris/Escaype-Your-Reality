@@ -18,10 +18,10 @@
     "1000": {
       "chapter": 0,
       "step": 0,
-      "location": "3,3",
-      "inStructure": false,
-      "structureId": null,
-      "roomId": null,
+      "location": "2,2",
+      "inStructure": true,
+      "structureId": "branch_floor",
+      "roomId": "vault",
       "inventory": [],
       "visitedLocations": [],
       "flags": {
