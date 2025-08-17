@@ -3,10 +3,16 @@ import path from "path";
 import * as exitCmd from "../commands/exit.js";
 import * as nextCmd from "../commands/next.js";
 import * as resetCmd from "../commands/reset.js";
+import * as skipCmd from "../commands/skip.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
 
-const commands = { next: nextCmd, reset: resetCmd, exit: exitCmd };
+const commands = {
+  next: nextCmd,
+  reset: resetCmd,
+  exit: exitCmd,
+  skip: skipCmd,
+};
 
 async function loadUser(userId) {
   const p = path.resolve(process.cwd(), "src", "db", "user", `${userId}.json`);
@@ -68,6 +74,10 @@ export async function handleIncoming({ jid, from, text }) {
 
   if (inSequence(state)) {
     const allowed = new Set(["next", "reset"]);
+
+    if (process.env.CODING_ENV === "DEV") {
+      allowed.add("skip");
+    }
 
     // Allow /exit only when the intro flow has fully finished
     let introAtEnd = false;
