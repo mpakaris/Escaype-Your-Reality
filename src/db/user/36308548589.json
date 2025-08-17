@@ -22,7 +22,11 @@
       "inStructure": true,
       "structureId": "apartment_unit",
       "roomId": "living_room",
-      "inventory": [],
+      "inventory": [
+        "restaurant_receipt",
+        "usb_hint_note",
+        "safe_key"
+      ],
       "visitedLocations": [],
       "flags": {
         "introSequenceSeen": true,

@@ -117,18 +117,26 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
+  // Raw contents
   const contents = Array.isArray(obj.contents) ? obj.contents : [];
-  if (!contents.length) {
-    const emptyTpl =
-      game.ui?.templates?.searchEmpty || "You search the *{object}*—nothing.";
+
+  // Filter out items already taken (in inventory)
+  const inv = Array.isArray(state.inventory) ? state.inventory : [];
+  const remaining = contents.filter((id) => !inv.includes(id));
+
+  if (!remaining.length) {
+    const emptyTakenTpl =
+      game.ui?.templates?.searchEmptyTaken ||
+      game.ui?.templates?.searchEmpty ||
+      "You search the *{object}*—nothing else.";
     await sendText(
       jid,
-      emptyTpl.replace("{object}", obj.displayName || obj.id)
+      emptyTakenTpl.replace("{object}", obj.displayName || obj.id)
     );
     return;
   }
 
-  const itemNames = mapItemNames(game, contents);
+  const itemNames = mapItemNames(game, remaining);
   const foundTpl =
     game.ui?.templates?.searchFound || "You search the *{object}* and find:";
   const list = bullets(itemNames);
