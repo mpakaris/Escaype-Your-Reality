@@ -1,0 +1,59 @@
+{
+  "userId": "36308548589",
+  "subscription": "FREE",
+  "purchasedGames": [
+    {
+      "uuid": "",
+      "title": "",
+      "purchasedAt": ""
+    },
+    {
+      "uuid": "1000",
+      "title": null,
+      "purchasedAt": "2025-08-09T09:51:53.487997Z"
+    }
+  ],
+  "currentGameUuid": "1000",
+  "currentState": {
+    "1000": {
+      "chapter": 0,
+      "step": 0,
+      "location": "office",
+      "inStructure": true,
+      "structureId": "office",
+      "roomId": null,
+      "inventory": [],
+      "visitedLocations": [],
+      "flags": {
+        "introSequenceSeen": true,
+        "tutorialComplete": false,
+        "didFirstMove": false,
+        "unlockedObjects": {}
+      },
+      "objectivesCompleted": [],
+      "activeObjective": null,
+      "hintCount": 0,
+      "lastCommand": null,
+      "introActive": true,
+      "introSeqIndex": 0,
+      "introStepIndex": 1,
+      "flow": {
+        "active": false,
+        "type": null,
+        "seq": 0,
+        "step": 0
+      }
+    }
+  },
+  "telemetry": {
+    "totalMessages": 0,
+    "totalHints": 0,
+    "lastLocation": "1,1",
+    "endings": []
+  },
+  "boughtGames": [
+    {
+      "uuid": "1000"
+    }
+  ]
+}

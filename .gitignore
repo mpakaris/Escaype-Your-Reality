@@ -1,0 +1,55 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+*.log.*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage / Testing
+coverage
+.nyc_output
+jest-cache/
+jest-html-reporters-*
+
+# Build artifacts
+dist/
+build/
+.tmp/
+.cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# DB and local state
+src/db/users/*
+src/db/games/*
+!src/db/users/.gitkeep
+!src/db/games/.gitkeep
+
+# Docker
+*.pid
+docker-compose.override.yml
