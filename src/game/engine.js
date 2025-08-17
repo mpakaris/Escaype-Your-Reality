@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import * as enterCmd from "../commands/enter.js";
 import * as exitCmd from "../commands/exit.js";
+import * as lookCmd from "../commands/look.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
 import * as resetCmd from "../commands/reset.js";
@@ -16,6 +17,7 @@ const commands = {
   skip: skipCmd,
   move: moveCmd,
   enter: enterCmd,
+  look: lookCmd,
 };
 
 async function loadUser(userId) {
