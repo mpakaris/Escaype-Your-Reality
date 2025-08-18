@@ -1,6 +1,15 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
+const hasFlag = (flags, key) => Boolean((flags || {})[key]);
+const condOk = (conds, state) =>
+  !conds ||
+  conds.every((c) => {
+    const s = String(c || "");
+    if (s.startsWith("flag:")) return hasFlag(state.flags, s.slice(5));
+    return true; // future: time/quest conditions
+  });
+
 function getLoc(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
 }
@@ -43,7 +52,9 @@ export async function run({ jid, user, game, state, args }) {
   }
 
   const room = getRoom(struct, state);
-  const objectsHere = room?.objects || [];
+  const objectsHere = (room?.objects || []).filter((o) =>
+    condOk(o.visibleWhen, state)
+  );
 
   // Room-only fuzzy match
   const hit = fuzzyPickFromObjects(token, objectsHere, ["id", "displayName"], {

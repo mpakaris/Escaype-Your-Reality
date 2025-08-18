@@ -1,6 +1,15 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
+const hasFlag = (flags, key) => Boolean((flags || {})[key]);
+const condOk = (conds, state) =>
+  !conds ||
+  conds.every((c) => {
+    const s = String(c || "");
+    if (s.startsWith("flag:")) return hasFlag(state.flags, s.slice(5));
+    return true; // future: other condition kinds
+  });
+
 const BULLETS = (arr) =>
   (arr || [])
     .filter(Boolean)
@@ -34,7 +43,9 @@ export async function run({ jid, user, game, state, args }) {
     const loc0 = getLoc(game, state);
     const struct0 = getStruct(loc0, state);
     const here0 = getRoom(struct0, state);
-    const objs0 = here0?.objects || [];
+    const objs0 = (here0?.objects || []).filter((o) =>
+      condOk(o.visibleWhen, state)
+    );
     if (!objs0.length) {
       await sendText(jid, "No objects to check here.");
       return;
@@ -57,7 +68,9 @@ export async function run({ jid, user, game, state, args }) {
   }
 
   const here = getRoom(struct, state);
-  const objectsHere = here?.objects || [];
+  const objectsHere = (here?.objects || []).filter((o) =>
+    condOk(o.visibleWhen, state)
+  );
 
   const hit = fuzzyPickFromObjects(token, objectsHere, ["id", "displayName"], {
     threshold: 0.55,

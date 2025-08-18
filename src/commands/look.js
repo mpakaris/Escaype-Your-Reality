@@ -86,10 +86,11 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Current room
-  const objectNames = unique(
-    (room.objects || []).map((o) => o.displayName || o.id)
+  // Filter objects by visibility conditions (e.g., visibleWhen: ["flag:rooftop_open"])
+  const visibleObjs = (room.objects || []).filter((o) =>
+    condOk(o.visibleWhen, state)
   );
+  const objectNames = unique(visibleObjs.map((o) => o.displayName || o.id));
 
   // room.npcs accepts string ids or {id, visibleWhen}
   const npcEntries = Array.isArray(room.npcs) ? room.npcs : [];
@@ -106,7 +107,7 @@ export async function run({ jid, user, game, state, args }) {
 
   const looseItemsHere = unique(room.items || []);
   const itemsInsideObjectsHere = unique(
-    (room.objects || []).flatMap((o) => o.contents || [])
+    visibleObjs.flatMap((o) => o.contents || [])
   );
   const visibleItems = unique(
     looseItemsHere.filter((it) => !itemsInsideObjectsHere.includes(it))
