@@ -59,26 +59,45 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Build candidate item ids visible/takeable **in this room**
-  const roomLoose = Array.isArray(room.items) ? room.items : [];
-  const objects = Array.isArray(room.objects) ? room.objects : [];
+  // Build candidate item ids visible/takeable **anywhere in this structure**
+  // Still respects per-user overrides (locked/opened) and excludes items already in inventory
+  const inv = Array.isArray(state.inventory) ? state.inventory : [];
+  const rooms = Array.isArray(struct.rooms) ? struct.rooms : [];
 
-  const fromObjects = [];
-  for (const o of objects) {
-    const lock = o.lock || {};
-    const oState = getObjState(state, o.id);
-    const locked =
-      typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
-    const openable = (o.tags || []).includes("openable");
-    const openedBase = o.states?.opened === true;
-    const opened =
-      typeof oState.opened === "boolean" ? oState.opened : openedBase;
-    if (locked) continue;
-    if (openable && !opened) continue; // closed container, don’t expose contents
-    if (Array.isArray(o.contents)) fromObjects.push(...o.contents);
+  // Map to remember where to remove the item from once taken
+  const sources = new Map(); // id -> { type: 'room'|'object', room, object? }
+  const candidateIds = new Set();
+
+  for (const r of rooms) {
+    const roomItems = Array.isArray(r.items) ? r.items : [];
+    for (const it of roomItems) {
+      if (inv.includes(it)) continue;
+      candidateIds.add(it);
+      if (!sources.has(it)) sources.set(it, { type: "room", room: r });
+    }
+    const objs = Array.isArray(r.objects) ? r.objects : [];
+    for (const o of objs) {
+      const lock = o.lock || {};
+      const oState = getObjState(state, o.id);
+      const locked =
+        typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+      const openable = (o.tags || []).includes("openable");
+      const openedBase = o.states?.opened === true;
+      const opened =
+        typeof oState.opened === "boolean" ? oState.opened : openedBase;
+      if (locked) continue;
+      if (openable && !opened) continue; // closed container, don’t expose contents
+      const contents = Array.isArray(o.contents) ? o.contents : [];
+      for (const it of contents) {
+        if (inv.includes(it)) continue;
+        candidateIds.add(it);
+        if (!sources.has(it))
+          sources.set(it, { type: "object", room: r, object: o });
+      }
+    }
   }
 
-  const candidates = [...new Set([...(roomLoose || []), ...fromObjects])];
+  const candidates = Array.from(candidateIds);
   if (!candidates.length) {
     await sendText(jid, "There’s nothing here you can take.");
     return;
@@ -123,13 +142,17 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Remove from room or any eligible object in this room
-  if (Array.isArray(room.items)) {
-    room.items = room.items.filter((x) => x !== target);
-  }
-  for (const o of objects) {
-    if (Array.isArray(o.contents)) {
-      o.contents = o.contents.filter((x) => x !== target);
+  // Remove from the correct source (room floor or specific container in its room)
+  const src = sources.get(target);
+  if (src) {
+    if (src.type === "room") {
+      if (Array.isArray(src.room.items)) {
+        src.room.items = src.room.items.filter((x) => x !== target);
+      }
+    } else if (src.type === "object") {
+      if (Array.isArray(src.object.contents)) {
+        src.object.contents = src.object.contents.filter((x) => x !== target);
+      }
     }
   }
 

@@ -1,6 +1,4 @@
 import { sendText } from "../services/whinself.js";
-import { beginSequence } from "../game/flow.js";
-import { run as nextRun } from "./next.js";
 
 export async function run({ jid, user, game, state }) {
   Object.assign(state, {
@@ -10,20 +8,24 @@ export async function run({ jid, user, game, state }) {
     inStructure: false,
     structureId: null,
     roomId: null,
+
     inventory: [],
     visitedLocations: [],
     objectivesCompleted: [],
+    talkedTo: [],
     activeObjective: null,
     hintCount: 0,
     lastCommand: "/reset",
-    flags: {
-      introSequenceSeen: false,
-      tutorialComplete: false,
-      didFirstMove: false,
-      unlockedObjects: {},
-    },
+
+    flags: {},
+    objects: {},
+
+    // Fresh intro state, do not auto-advance
+    introActive: true,
+    introSeqIndex: 0,
+    introStepIndex: 0,
+    flow: { active: true, type: "intro", seq: 0, step: 0, _headerShown: false },
   });
-  beginSequence(state, { type: "intro", seq: 0, step: 0 });
-  await sendText(jid, "Intro restarted.");
-  await nextRun({ jid, user, game, state });
+
+  await sendText(jid, "Game reset. Type */next* to begin.");
 }

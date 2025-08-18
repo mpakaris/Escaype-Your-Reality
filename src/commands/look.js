@@ -5,23 +5,45 @@ function getCurrentLocation(game, state) {
   const id = state.location;
   return (game.locations || []).find((l) => l.id === id) || null;
 }
-
 function getCurrentStructure(loc, state) {
   if (!loc) return null;
   const sid = state.structureId;
   return (loc.structures || []).find((s) => s.id === sid) || null;
 }
-
+function getCurrentRoom(structure, state) {
+  if (!structure) return null;
+  const rid = state.roomId;
+  return (structure.rooms || []).find((r) => r.id === rid) || null;
+}
 function unique(arr = []) {
-  return Array.from(new Set(arr.filter(Boolean)));
+  return Array.from(new Set((arr || []).filter(Boolean)));
 }
 
-function listToText(arr = [], empty = "none") {
-  const a = arr.filter(Boolean);
-  if (!a.length) return empty;
-  if (a.length === 1) return a[0];
-  if (a.length === 2) return `${a[0]} and ${a[1]}`;
-  return `${a.slice(0, -1).join(", ")}, and ${a[a.length - 1]}`;
+// Evaluate generic conditions (flags, !flags, hasItem)
+function condOk(conds, state) {
+  if (!Array.isArray(conds) || !conds.length) return true;
+  const flags = state.flags || {};
+  const hasItem = (id) =>
+    Array.isArray(state.inventory) && state.inventory.includes(id);
+  for (const c of conds) {
+    if (typeof c !== "string") return false;
+    if (c.startsWith("flag:")) {
+      const k = c.slice(5);
+      if (!flags[k]) return false;
+      continue;
+    }
+    if (c.startsWith("!flag:")) {
+      const k = c.slice(6);
+      if (flags[k]) return false;
+      continue;
+    }
+    if (c.startsWith("hasItem:")) {
+      const k = c.slice(8);
+      if (!hasItem(k)) return false;
+      continue;
+    }
+  }
+  return true;
 }
 
 function listToBullets(arr = [], empty = "none") {
@@ -35,7 +57,6 @@ const LOOK_KEYWORDS = {
   people: ["people", "person", "npc", "npcs", "folk", "faces", "persons"],
   items: ["item", "items", "loot", "gear", "stuff"],
 };
-
 function resolveLookMode(input) {
   const q = (input || "").trim();
   if (!q) return null;
@@ -59,30 +80,60 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Aggregate across all rooms in this structure
+  const room = getCurrentRoom(structure, state);
+  if (!room) {
+    await sendText(jid, "You’re inside, but not in a defined room.");
+    return;
+  }
+
   const rooms = Array.isArray(structure.rooms) ? structure.rooms : [];
 
+  // Current room
   const objectNames = unique(
-    rooms.flatMap((r) => (r.objects || []).map((o) => o.displayName || o.id))
+    (room.objects || []).map((o) => o.displayName || o.id)
   );
 
+  // room.npcs accepts string ids or {id, visibleWhen}
+  const npcEntries = Array.isArray(room.npcs) ? room.npcs : [];
+  const visibleNpcIds = npcEntries
+    .map((e) => (typeof e === "string" ? { id: e } : e))
+    .filter((e) => e && e.id && condOk(e.visibleWhen, state))
+    .map((e) => e.id);
   const npcNames = unique(
-    rooms.flatMap((r) =>
-      (r.npcs || []).map((nid) => {
-        const def = (game.npcs || []).find((n) => n.id === nid);
-        return def?.displayName || nid;
-      })
-    )
+    visibleNpcIds.map((nid) => {
+      const def = (game.npcs || []).find((n) => n.id === nid);
+      return def?.displayName || nid;
+    })
   );
 
-  const looseItems = unique(rooms.flatMap((r) => r.items || []));
-
-  const itemsInsideObjects = unique(
-    rooms.flatMap((r) => (r.objects || []).flatMap((o) => o.contents || []))
+  const looseItemsHere = unique(room.items || []);
+  const itemsInsideObjectsHere = unique(
+    (room.objects || []).flatMap((o) => o.contents || [])
   );
-
   const visibleItems = unique(
-    looseItems.filter((it) => !itemsInsideObjects.includes(it))
+    looseItemsHere.filter((it) => !itemsInsideObjectsHere.includes(it))
+  );
+
+  // Elsewhere-in-structure hints (respect conditions)
+  const elsewhereNpcNames = unique(
+    rooms
+      .filter((r) => r.id !== room.id)
+      .flatMap((r) => {
+        const entries = Array.isArray(r.npcs) ? r.npcs : [];
+        return entries
+          .map((e) => (typeof e === "string" ? { id: e } : e))
+          .filter((e) => e && e.id && condOk(e.visibleWhen, state))
+          .map((e) => {
+            const def = (game.npcs || []).find((n) => n.id === e.id);
+            return def?.displayName || e.id;
+          });
+      })
+  );
+
+  const elsewhereObjectNames = unique(
+    rooms
+      .filter((r) => r.id !== room.id)
+      .flatMap((r) => (r.objects || []).map((o) => o.displayName || o.id))
   );
 
   const rawMode = (args && args[0] ? args[0] : "").toLowerCase();
@@ -93,10 +144,24 @@ export async function run({ jid, user, game, state, args }) {
       jid,
       `*Objects here:*\n\n${listToBullets(objectNames, "none")}`
     );
+    if (elsewhereObjectNames.length) {
+      await sendText(
+        jid,
+        `*Elsewhere in this building:*\n\n${listToBullets(
+          elsewhereObjectNames
+        )}`
+      );
+    }
     return;
   }
   if (mode === "people") {
     await sendText(jid, `*People here:*\n\n${listToBullets(npcNames, "none")}`);
+    if (elsewhereNpcNames.length) {
+      await sendText(
+        jid,
+        `*Elsewhere in this building:*\n\n${listToBullets(elsewhereNpcNames)}`
+      );
+    }
     return;
   }
   if (mode === "items") {
@@ -115,7 +180,7 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Default: brief overview
+  // Default: summary
   const lines = [];
   lines.push(`*Objects here:*\n\n${listToBullets(objectNames, "none")}`);
   lines.push("");
@@ -125,4 +190,11 @@ export async function run({ jid, user, game, state, args }) {
     `*Items in plain sight:*\n\n${listToBullets(visibleItems, "none")}`
   );
   await sendText(jid, lines.join("\n"));
+
+  if (elsewhereNpcNames.length) {
+    await sendText(
+      jid,
+      `*Elsewhere in this building:*\n\n${listToBullets(elsewhereNpcNames)}`
+    );
+  }
 }

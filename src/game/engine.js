@@ -12,7 +12,9 @@ import * as resetCmd from "../commands/reset.js";
 import * as searchCmd from "../commands/search.js";
 import * as skipCmd from "../commands/skip.js";
 import * as takeCmd from "../commands/take.js";
+import * as talkCmd from "../commands/talk.js";
 import * as useCmd from "../commands/use.js";
+import { checkAndAdvanceChapter } from "../services/progress.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
 
@@ -31,6 +33,7 @@ const commands = {
   read: readCmd,
   drop: dropCmd,
   use: useCmd,
+  talk: talkCmd,
 };
 
 async function loadUser(userId) {
@@ -51,6 +54,15 @@ async function loadGame(gameUUID) {
   );
   const raw = await fs.readFile(p, "utf-8");
   return JSON.parse(raw);
+}
+
+function getCurrentLocation(game, state) {
+  return (game.locations || []).find((l) => l.id === state.location) || null;
+}
+function getCurrentStructure(game, state) {
+  const loc = getCurrentLocation(game, state);
+  if (!loc) return null;
+  return (loc.structures || []).find((s) => s.id === state.structureId) || null;
 }
 
 export async function handleIncoming({ jid, from, text }) {
@@ -92,25 +104,28 @@ export async function handleIncoming({ jid, from, text }) {
   console.log("engine parsed:", { input, isCmd, cmd, flow: state.flow });
 
   if (inSequence(state)) {
-    const allowed = new Set(["next", "reset"]);
-
+    const allowed = new Set(["next", "reset", "exit"]);
     if (process.env.CODING_ENV === "DEV") {
       allowed.add("skip");
     }
 
-    // Allow /exit only when the intro flow has fully finished
-    let introAtEnd = false;
-    if (state.flow?.type === "intro") {
-      const introLen = (game.sequences?.intro || []).length;
-      introAtEnd = (state.flow?.seq || 0) >= introLen;
-      if (introAtEnd) allowed.add("exit");
-    }
+    const introLen = (game.sequences?.intro || []).length;
+    const atSeq = state.flow?.seq ?? 0;
+    const atStep = state.flow?.step ?? 0;
 
     if (!isCmd || !allowed.has(cmd)) {
-      const msg = introAtEnd
-        ? "Intro finished. Type */exit* to begin."
-        : game.ui?.templates?.unknownCommandDuringIntro ||
-          "Finish the introduction first. Type */next* or */reset*.";
+      console.debug("[engine] intro gate block:", {
+        input,
+        cmd,
+        allowed: Array.from(allowed),
+        flow: state.flow,
+        introLen,
+        atSeq,
+        atStep,
+      });
+      const msg =
+        game.ui?.templates?.unknownCommandDuringIntro ||
+        "Finish the introduction first. Type */next*, */exit*, or */reset*.";
       await sendText(jid, msg);
       return;
     }
@@ -126,6 +141,23 @@ export async function handleIncoming({ jid, from, text }) {
     }
   }
 
+  // Always honor reset/exit immediately to avoid being blocked by any gating
+  if (isCmd && (cmd === "reset" || cmd === "exit")) {
+    const handler = commands[cmd];
+    if (handler?.run) {
+      console.debug("[engine] early-dispatch", { cmd, flow: state.flow });
+      await handler.run({ jid, user, game, state, args });
+      await checkAndAdvanceChapter({ jid, game, state });
+      await saveUser(user, userWrap.path);
+      console.log("ENGINE: state saved (early)", {
+        seq: state.flow?.seq,
+        step: state.flow?.step,
+        hdr: state.flow?._headerShown,
+      });
+      return;
+    }
+  }
+
   const handler = commands[cmd];
   if (!handler) {
     await sendText(
@@ -136,6 +168,33 @@ export async function handleIncoming({ jid, from, text }) {
   }
 
   await handler.run({ jid, user, game, state, args });
+  console.debug("[engine] ran handler", { cmd, args });
+  // Generic visit flags: mark location and structure visits in user state
+  try {
+    state.flags =
+      state.flags && typeof state.flags === "object" ? state.flags : {};
+
+    const loc = getCurrentLocation(game, state);
+    if (loc?.id) {
+      state.flags[`visited_location:${loc.id}`] = true;
+    }
+
+    if (state.inStructure) {
+      const struct = getCurrentStructure(game, state);
+      if (struct?.id) {
+        state.flags[`visited_structure_id:${struct.id}`] = true;
+        const label = (
+          struct.displayName ||
+          struct.name ||
+          struct.id ||
+          ""
+        ).toLowerCase();
+        const slug = label.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+        if (slug) state.flags[`visited_structure_label:${slug}`] = true;
+      }
+    }
+  } catch {}
+  await checkAndAdvanceChapter({ jid, game, state });
   await saveUser(user, userWrap.path);
   console.log("ENGINE: state saved", {
     seq: state.flow?.seq,

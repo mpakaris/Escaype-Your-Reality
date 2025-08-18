@@ -1,27 +1,16 @@
 {
-  "userId": "36308548589",
-  "subscription": "FREE",
-  "purchasedGames": [
-    {
-      "uuid": "",
-      "title": "",
-      "purchasedAt": ""
-    },
-    {
-      "uuid": "1000",
-      "title": null,
-      "purchasedAt": "2025-08-09T09:51:53.487997Z"
-    }
-  ],
+  "id": "1000",
+  "title": "The Daily Ledger",
+  "locations": [],
   "currentGameUuid": "1000",
   "currentState": {
     "1000": {
-      "chapter": 0,
+      "chapter": 2,
       "step": 0,
-      "location": "2,2",
+      "location": "3,2",
       "inStructure": true,
-      "structureId": "branch_floor",
-      "roomId": "vault",
+      "structureId": "news_floor",
+      "roomId": "reception",
       "inventory": [
         "restaurant_receipt",
         "usb_hint_note",
@@ -35,21 +24,34 @@
         "introSequenceSeen": true,
         "tutorialComplete": false,
         "didFirstMove": false,
-        "unlockedObjects": {}
+        "unlockedObjects": {},
+        "visited_location:1,1": true,
+        "visited_structure_id:apartment_unit": true,
+        "visited_structure_label:journalist_s_apartment": true,
+        "chapter_1_done": true,
+        "visited_location:2,2": true,
+        "visited_structure_id:branch_floor": true,
+        "visited_structure_label:city_bank": true,
+        "visited_location:3,2": true,
+        "visited_structure_id:news_floor": true,
+        "visited_structure_label:daily_ledger_offices": true,
+        "sophie_bank_hint": true
       },
       "objectivesCompleted": [],
       "activeObjective": null,
       "hintCount": 0,
       "lastCommand": null,
-      "introActive": true,
-      "introSeqIndex": 0,
-      "introStepIndex": 1,
       "flow": {
         "active": false,
         "type": null,
         "seq": 0,
         "step": 0
       },
+      "talkedTo": [
+        "neighbor_mrs_kline",
+        "bank_manager_arthur",
+        "receptionist_sophie"
+      ],
       "objects": {
         "deposit_box_42": {
           "locked": false,
@@ -57,16 +59,5 @@
         }
       }
     }
-  },
-  "telemetry": {
-    "totalMessages": 0,
-    "totalHints": 0,
-    "lastLocation": "1,1",
-    "endings": []
-  },
-  "boughtGames": [
-    {
-      "uuid": "1000"
-    }
-  ]
+  }
 }
