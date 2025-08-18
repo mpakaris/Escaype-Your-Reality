@@ -1,6 +1,15 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
+function normalize(s = "") {
+  return s
+    .normalize("NFKD")
+    .replace(/[’‘ʼˈ`´]/g, "'")
+    .replace(/[“”]/g, '"')
+    .toLowerCase()
+    .trim();
+}
+
 function getLoc(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
 }
@@ -19,149 +28,253 @@ function objectLabel(o) {
   return o?.displayName || o?.id || "object";
 }
 
-// Per-user object state helpers
-function ensureObjectState(state) {
-  if (!state.objects || typeof state.objects !== "object") state.objects = {};
-  return state.objects;
-}
-function getObjState(state, objId) {
-  ensureObjectState(state);
-  return state.objects[objId] || {};
-}
-function setObjState(state, objId, patch) {
-  ensureObjectState(state);
-  const prev = state.objects[objId] || {};
-  state.objects[objId] = { ...prev, ...patch };
+function prettyLabel(o) {
+  const raw = o?.displayName || o?.name || o?.id || "object";
+  if (o?.displayName || o?.name) return raw;
+  // humanize snake_case / id
+  return String(raw)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function splitArgs(args) {
   const raw = (args || []).join(" ").trim();
   if (!raw) return { itemToken: "", objectToken: "" };
-  const ON = /\s+on\s+/i;
-  if (ON.test(raw)) {
-    const [left, right] = raw.split(ON);
-    return {
-      itemToken: (left || "").trim(),
-      objectToken: (right || "").trim(),
-    };
+  const text = normalize(raw);
+  const m = text.match(/^(.*?)\s+(?:on|with|to|onto)\s+(.*)$/);
+  if (m) {
+    return { itemToken: m[1].trim(), objectToken: m[2].trim() };
   }
-  // fallback: first token is item, rest is object
-  const parts = raw.split(/\s+/);
+  const parts = text.split(/\s+/);
   const itemToken = parts.shift() || "";
   const objectToken = parts.join(" ");
   return { itemToken, objectToken };
 }
 
+function getObjState(state, objId) {
+  state.objects =
+    state.objects && typeof state.objects === "object" ? state.objects : {};
+  state.objects[objId] = state.objects[objId] || {};
+  return state.objects[objId];
+}
+function setObjState(state, objId, patch) {
+  state.objects =
+    state.objects && typeof state.objects === "object" ? state.objects : {};
+  state.objects[objId] = { ...(state.objects[objId] || {}), ...(patch || {}) };
+}
+
+function ensureFlags(state) {
+  state.flags =
+    state.flags && typeof state.flags === "object" ? state.flags : {};
+  return state.flags;
+}
+
 export async function run({ jid, user, game, state, args }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "Use what on what? Step inside first with */enter*.");
+    await sendText(jid, "Use that where? Step inside first with */enter*.");
     return;
   }
 
   const { itemToken, objectToken } = splitArgs(args);
-  if (!itemToken || !objectToken) {
-    await sendText(
-      jid,
-      "Format: */use <item> on <object>*\nExample: */use key on box*."
-    );
+  if (!itemToken) {
+    await sendText(jid, "Use what? Try */inventory* or */look objects*.");
     return;
   }
 
   const loc = getLoc(game, state);
   const struct = getStruct(loc, state);
   const room = getRoom(struct, state);
-  if (!struct || !room) {
-    await sendText(jid, "There’s nothing here to use that on.");
+  if (!room) {
+    await sendText(jid, "Wrong place for that.");
     return;
   }
 
-  // 1) Resolve item from inventory
+  // Build inventory candidates
   const inv = Array.isArray(state.inventory) ? state.inventory : [];
-  const invForMatch = inv.map((id) => ({
-    id,
-    label: itemDef(game, id)?.displayName || id,
-  }));
+  const invEntries = inv.map((id) => {
+    const def = itemDef(game, id);
+    const label = def?.displayName || def?.name || id;
+    return {
+      id,
+      label,
+      norm: normalize(label),
+      obj: def || { id, displayName: label },
+    };
+  });
+
   const itemHit = fuzzyPickFromObjects(
     itemToken,
-    invForMatch,
-    ["id", "label"],
-    { threshold: 0.55, maxResults: 1 }
+    invEntries,
+    ["id", "label", "norm"],
+    { threshold: 0.45, maxResults: 1 }
   );
-  const itemId = itemHit?.obj?.id || null;
-  if (!itemId) {
-    await sendText(jid, "You don’t have that item.");
+  const item = itemHit?.obj || null;
+  const itemId = item?.id;
+  if (!item || !itemId) {
+    await sendText(jid, "You aren't holding that.");
     return;
   }
-  const item = itemDef(game, itemId);
 
-  // 2) Resolve object in current room first, then entire structure
+  // Build object candidates (current room only)
   const objectsHere = Array.isArray(room.objects) ? room.objects : [];
-  const objectsAll = (struct.rooms || []).flatMap((r) => r.objects || []);
+  const hereEntries = objectsHere.map((o) => ({
+    id: o.id,
+    label: o.displayName || o.id,
+    norm: normalize(o.displayName || o.id),
+    obj: o,
+  }));
+
   let objHit = fuzzyPickFromObjects(
     objectToken,
-    objectsHere,
-    ["id", "displayName"],
-    { threshold: 0.55, maxResults: 1 }
+    hereEntries,
+    ["id", "label", "norm"],
+    { threshold: 0.45, maxResults: 1 }
   );
-  if (!objHit)
+  // If no object token provided, try to infer from item token (e.g., "/use key box")
+  if (!objHit && !objectToken) {
     objHit = fuzzyPickFromObjects(
-      objectToken,
-      objectsAll,
-      ["id", "displayName"],
-      { threshold: 0.6, maxResults: 1 }
+      itemToken,
+      hereEntries,
+      ["id", "label", "norm"],
+      { threshold: 0.45, maxResults: 1 }
     );
+  }
+
   const obj = objHit?.obj || null;
   if (!obj) {
-    const names = objectsAll
-      .map((o) => `*${o.displayName || o.id}*`)
-      .join(", ");
+    const names = hereEntries.map((e) => `*${e.label}*`).join(", ");
     await sendText(
       jid,
       names
-        ? `No such object here. Try one of: ${names}`
-        : "No objects here to use that on."
+        ? `Use it on what? Here you have: ${names}`
+        : "Use it on what? Nothing here."
     );
     return;
   }
 
-  const lock = obj.lock || {};
-  const oState = getObjState(state, obj.id);
-  const isLocked = typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
-  // Already unlocked?
-  if (!lock || isLocked === false) {
-    await sendText(jid, `*${objectLabel(obj)}* isn’t locked.`);
+  // If the matched object is missing a lock definition in this instance,
+  // try to recover the lock metadata from any identical object definition
+  // within the same structure (same id). This is safe for single-room but
+  // also guards against partial data merges.
+  let effectiveObj = obj;
+  if (!effectiveObj.lock && struct && Array.isArray(struct.rooms)) {
+    const withLock = struct.rooms
+      .flatMap((r) => (Array.isArray(r.objects) ? r.objects : []))
+      .find((o) => o && o.id === obj.id && o.lock);
+    if (withLock) effectiveObj = withLock;
+  }
+
+  // Debug: inspect matched object and per-user state
+  try {
+    const ovr = (state.objects && state.objects[effectiveObj.id]) || {};
+    console.debug("[use] matched", {
+      itemId,
+      itemLabel: item?.displayName || item?.name || itemId,
+      objId: obj.id,
+      objName: obj.displayName || obj.id,
+      hasLock: !!obj.lock,
+      usedFallback: effectiveObj !== obj,
+      effHasLock: !!effectiveObj.lock,
+      effLock: effectiveObj.lock || null,
+      override: ovr,
+    });
+  } catch (_) {}
+
+  // Effective lock/open state merges user state with base object
+  const oState = getObjState(state, effectiveObj.id);
+  const baseLocked = effectiveObj.lock ? !!effectiveObj.lock.locked : false;
+  const baseOpened = effectiveObj.states ? !!effectiveObj.states.opened : false;
+  const isLocked = oState.locked ?? baseLocked;
+
+  const lock = effectiveObj.lock || null;
+  if (!lock) {
+    const lockable = Array.isArray(obj.tags) && obj.tags.includes("lockable");
+    const note = lockable
+      ? "looks lockable, but no lock is defined in the cartridge."
+      : "doesn’t have a lock.";
+    await sendText(jid, `*${prettyLabel(obj)}* ${note}`);
     return;
   }
 
-  // Keyed lock path per your object structure
-  if (lock.type === "key") {
-    const required = lock.requiredItem;
-    if (required && required !== itemId) {
-      const failMsg =
-        (item?.messages && item.messages.useFail) || "That doesn’t fit.";
-      await sendText(jid, failMsg);
+  if (isLocked) {
+    // Prefer explicit requiredItem, regardless of type
+    if (lock.requiredItem) {
+      if (lock.requiredItem !== itemId) {
+        const fail =
+          lock.lockedHint ||
+          item?.messages?.useFail ||
+          "That mechanism isn’t compatible with this item.";
+        await sendText(jid, fail);
+        return;
+      }
+      const patch = { locked: false };
+      if (lock.autoOpenOnUnlock) patch.opened = true;
+      setObjState(state, effectiveObj.id, patch);
+      // set optional progression flag from cartridge
+      if (lock.onUnlockFlag) {
+        ensureFlags(state)[lock.onUnlockFlag] = true;
+      }
+      // consume the item on successful use
+      if (Array.isArray(state.inventory)) {
+        const idx = state.inventory.indexOf(itemId);
+        if (idx >= 0) state.inventory.splice(idx, 1);
+      }
+      const ok =
+        item?.messages?.useSuccess ||
+        lock.onUnlockMsg ||
+        `Unlocked ${prettyLabel(obj)}.`;
+      await sendText(jid, ok);
+      if (Array.isArray(obj.contents) && obj.contents.length) {
+        await sendText(jid, "You can now /check it for contents.");
+      }
       return;
     }
 
-    // Persist unlock in per-user overrides
-    const patch = { locked: false };
-    if (lock.autoOpenOnUnlock) patch.opened = true;
-    setObjState(state, obj.id, patch);
-
-    // Success messaging: prefer item.messages.useSuccess, else lock.onUnlockMsg, else generic
-    const okMsg =
-      (item?.messages && item.messages.useSuccess) ||
-      lock.onUnlockMsg ||
-      `*${objectLabel(obj)}* unlocks.`;
-    await sendText(jid, okMsg);
-
-    // Hint to check contents if any
-    if (Array.isArray(obj.contents) && obj.contents.length) {
-      await sendText(jid, "You can now */check* it for contents.");
+    // Fallback: type-based key
+    if (lock.type === "key") {
+      const isKey =
+        (item?.tags || []).includes("key") ||
+        /key/i.test(item?.name || item?.displayName || "");
+      if (!isKey) {
+        const fail =
+          lock.lockedHint || item?.messages?.useFail || "That doesn’t fit.";
+        await sendText(jid, fail);
+        return;
+      }
+      const patch = { locked: false };
+      if (lock.autoOpenOnUnlock) patch.opened = true;
+      setObjState(state, effectiveObj.id, patch);
+      // set optional progression flag from cartridge
+      if (lock.onUnlockFlag) {
+        ensureFlags(state)[lock.onUnlockFlag] = true;
+      }
+      // consume the item on successful use
+      if (Array.isArray(state.inventory)) {
+        const idx = state.inventory.indexOf(itemId);
+        if (idx >= 0) state.inventory.splice(idx, 1);
+      }
+      const ok =
+        item?.messages?.useSuccess ||
+        lock.onUnlockMsg ||
+        `Unlocked ${prettyLabel(obj)}.`;
+      await sendText(jid, ok);
+      if (Array.isArray(obj.contents) && obj.contents.length) {
+        await sendText(jid, "You can now /check it for contents.");
+      }
+      return;
     }
+
+    // Unknown lock types → deny
+    await sendText(jid, lock.lockedHint || "It won’t budge.");
     return;
   }
 
-  // Other lock types can be added later
-  await sendText(jid, "That mechanism isn’t compatible with this item.");
+  // Not locked
+  const isOpened = oState.opened ?? baseOpened;
+  if (!isOpened && lock) {
+    await sendText(jid, `*${prettyLabel(obj)}* is unlocked but closed.`);
+    return;
+  }
+
+  await sendText(jid, "Nothing happens.");
 }

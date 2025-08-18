@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import * as checkCmd from "../commands/check.js";
 import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
 import * as exitCmd from "../commands/exit.js";
@@ -7,6 +8,7 @@ import * as inventoryCmd from "../commands/inventory.js";
 import * as lookCmd from "../commands/look.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
+import * as openCmd from "../commands/open.js";
 import * as readCmd from "../commands/read.js";
 import * as resetCmd from "../commands/reset.js";
 import * as searchCmd from "../commands/search.js";
@@ -26,14 +28,15 @@ const commands = {
   move: moveCmd,
   enter: enterCmd,
   look: lookCmd,
-  search: searchCmd,
-  check: searchCmd,
+  check: checkCmd,
   take: takeCmd,
   inventory: inventoryCmd,
   read: readCmd,
   drop: dropCmd,
   use: useCmd,
   talk: talkCmd,
+  open: openCmd,
+  search: searchCmd,
 };
 
 async function loadUser(userId) {
@@ -63,6 +66,17 @@ function getCurrentStructure(game, state) {
   const loc = getCurrentLocation(game, state);
   if (!loc) return null;
   return (loc.structures || []).find((s) => s.id === state.structureId) || null;
+}
+
+function ensureRoomInStructure(game, state) {
+  const struct = getCurrentStructure(game, state);
+  if (!struct || !Array.isArray(struct.rooms) || struct.rooms.length === 0)
+    return;
+  // Prefer existing id if valid, else 'main', else first room
+  const byId = state.roomId && struct.rooms.find((r) => r.id === state.roomId);
+  const main = struct.rooms.find((r) => r.id === "main");
+  const chosen = byId || main || struct.rooms[0];
+  if (!state.roomId || state.roomId !== chosen.id) state.roomId = chosen.id;
 }
 
 export async function handleIncoming({ jid, from, text }) {
@@ -147,6 +161,14 @@ export async function handleIncoming({ jid, from, text }) {
     if (handler?.run) {
       console.debug("[engine] early-dispatch", { cmd, flow: state.flow });
       await handler.run({ jid, user, game, state, args });
+      // Normalize room after command side-effects
+      if (state.inStructure && state.structureId) {
+        try {
+          ensureRoomInStructure(game, state);
+        } catch {}
+      } else {
+        if (state.roomId) state.roomId = null;
+      }
       await checkAndAdvanceChapter({ jid, game, state });
       await saveUser(user, userWrap.path);
       console.log("ENGINE: state saved (early)", {
@@ -165,6 +187,16 @@ export async function handleIncoming({ jid, from, text }) {
       game.ui?.templates?.unknownCommandGeneric || "Unknown command."
     );
     return;
+  }
+
+  // Normalize room context to single-room model
+  if (state.inStructure && state.structureId) {
+    try {
+      ensureRoomInStructure(game, state);
+    } catch {}
+  } else {
+    // outside any structure, keep roomId unset
+    if (state.roomId) state.roomId = null;
   }
 
   await handler.run({ jid, user, game, state, args });

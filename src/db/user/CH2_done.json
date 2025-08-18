@@ -5,11 +5,11 @@
   "currentGameUuid": "1000",
   "currentState": {
     "1000": {
-      "chapter": 4,
+      "chapter": 3,
       "step": 0,
-      "location": "3,1",
+      "location": "3,2",
       "inStructure": true,
-      "structureId": "staircore",
+      "structureId": "news_floor",
       "roomId": "main",
       "inventory": [
         "usb_hint_note",
@@ -21,8 +21,8 @@
         "chef_complaint_email",
         "cast_iron_skillet",
         "supply_order",
-        "editor_note",
-        "metal_pipe_weapon"
+        "rooftop_code",
+        "editor_note"
       ],
       "visitedLocations": [],
       "flags": {
@@ -44,12 +44,7 @@
         "lena_receipt_hint": true,
         "sophie_bank_hint": true,
         "got_editor_note": true,
-        "chapter_2_done": true,
-        "visited_location:3,1": true,
-        "visited_structure_id:staircore": true,
-        "visited_structure_label:rooftop_stairwell": true,
-        "rooftop_open": true,
-        "chapter_3_done": true
+        "chapter_2_done": true
       },
       "objectivesCompleted": [],
       "activeObjective": null,
@@ -75,9 +70,6 @@
         "filing_cabinet": {
           "locked": false,
           "opened": true
-        },
-        "keypad": {
-          "locked": false
         }
       },
       "introActive": true,

@@ -86,8 +86,6 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  const rooms = Array.isArray(structure.rooms) ? structure.rooms : [];
-
   // Current room
   const objectNames = unique(
     (room.objects || []).map((o) => o.displayName || o.id)
@@ -114,28 +112,6 @@ export async function run({ jid, user, game, state, args }) {
     looseItemsHere.filter((it) => !itemsInsideObjectsHere.includes(it))
   );
 
-  // Elsewhere-in-structure hints (respect conditions)
-  const elsewhereNpcNames = unique(
-    rooms
-      .filter((r) => r.id !== room.id)
-      .flatMap((r) => {
-        const entries = Array.isArray(r.npcs) ? r.npcs : [];
-        return entries
-          .map((e) => (typeof e === "string" ? { id: e } : e))
-          .filter((e) => e && e.id && condOk(e.visibleWhen, state))
-          .map((e) => {
-            const def = (game.npcs || []).find((n) => n.id === e.id);
-            return def?.displayName || e.id;
-          });
-      })
-  );
-
-  const elsewhereObjectNames = unique(
-    rooms
-      .filter((r) => r.id !== room.id)
-      .flatMap((r) => (r.objects || []).map((o) => o.displayName || o.id))
-  );
-
   const rawMode = (args && args[0] ? args[0] : "").toLowerCase();
   const mode = resolveLookMode(rawMode);
 
@@ -144,24 +120,10 @@ export async function run({ jid, user, game, state, args }) {
       jid,
       `*Objects here:*\n\n${listToBullets(objectNames, "none")}`
     );
-    if (elsewhereObjectNames.length) {
-      await sendText(
-        jid,
-        `*Elsewhere in this building:*\n\n${listToBullets(
-          elsewhereObjectNames
-        )}`
-      );
-    }
     return;
   }
   if (mode === "people") {
     await sendText(jid, `*People here:*\n\n${listToBullets(npcNames, "none")}`);
-    if (elsewhereNpcNames.length) {
-      await sendText(
-        jid,
-        `*Elsewhere in this building:*\n\n${listToBullets(elsewhereNpcNames)}`
-      );
-    }
     return;
   }
   if (mode === "items") {
@@ -190,11 +152,4 @@ export async function run({ jid, user, game, state, args }) {
     `*Items in plain sight:*\n\n${listToBullets(visibleItems, "none")}`
   );
   await sendText(jid, lines.join("\n"));
-
-  if (elsewhereNpcNames.length) {
-    await sendText(
-      jid,
-      `*Elsewhere in this building:*\n\n${listToBullets(elsewhereNpcNames)}`
-    );
-  }
 }

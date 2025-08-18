@@ -12,9 +12,6 @@ function getCurrentRoom(structure, state) {
   if (!structure) return null;
   return (structure.rooms || []).find((r) => r.id === state.roomId) || null;
 }
-function unique(arr = []) {
-  return Array.from(new Set((arr || []).filter(Boolean)));
-}
 
 // Evaluate generic conditions (flags, !flags, hasItem)
 function condOk(conds, state) {
@@ -43,32 +40,6 @@ function condOk(conds, state) {
   return true;
 }
 
-function applyEffects(effects, state) {
-  const list = Array.isArray(effects)
-    ? effects
-    : typeof effects === "string"
-    ? [effects]
-    : Array.isArray(effects?.effect)
-    ? effects.effect
-    : [];
-  if (!list.length) return;
-  state.flags =
-    state.flags && typeof state.flags === "object" ? state.flags : {};
-  for (const e of list) {
-    if (typeof e !== "string") continue;
-    if (e.startsWith("flag:")) {
-      const k = e.slice(5);
-      if (k) state.flags[k] = true;
-      continue;
-    }
-    if (e.startsWith("!flag:")) {
-      const k = e.slice(6);
-      if (k) state.flags[k] = false;
-      continue;
-    }
-  }
-}
-
 function normalizeFuzzyResult(res) {
   if (!res) return null;
   if (typeof res === "string") return res;
@@ -91,11 +62,6 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  console.debug("[talk] args", {
-    raw: args,
-    joined: (args && args.join(" ")) || "",
-  });
-
   const loc = getCurrentLocation(game, state);
   const structure = getCurrentStructure(loc, state);
   const room = getCurrentRoom(structure, state);
@@ -104,7 +70,7 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // room.npcs can be ["id", { id, visibleWhen }]
+  // Resolve visible NPCs in THIS room only (room.npcs can be ["id", { id, visibleWhen }])
   const entries = Array.isArray(room.npcs) ? room.npcs : [];
   const visibleIds = entries
     .map((e) => (typeof e === "string" ? { id: e } : e))
@@ -114,24 +80,7 @@ export async function run({ jid, user, game, state, args }) {
     visibleIds.includes(n.id)
   );
 
-  // Collect visible NPCs in other rooms of the same structure (honor visibleWhen)
-  const rooms = Array.isArray(structure.rooms) ? structure.rooms : [];
-  const elsewhere = [];
-  for (const r of rooms) {
-    if (!r || r.id === room.id) continue;
-    const entriesR = Array.isArray(r.npcs) ? r.npcs : [];
-    const idsR = entriesR
-      .map((e) => (typeof e === "string" ? { id: e } : e))
-      .filter((e) => e && e.id && condOk(e.visibleWhen, state))
-      .map((e) => e.id);
-    if (!idsR.length) continue;
-    const npcsR = (game.npcs || []).filter((n) => idsR.includes(n.id));
-    for (const n of npcsR) {
-      elsewhere.push({ npc: n, roomId: r.id });
-    }
-  }
-
-  if (!visibleNpcs.length && !elsewhere.length) {
+  if (!visibleNpcs.length) {
     await sendText(jid, "No one here seems willing to talk.");
     return;
   }
@@ -140,7 +89,6 @@ export async function run({ jid, user, game, state, args }) {
   let targetNpc = null;
 
   if (!targetRaw) {
-    // If only one NPC present, talk to them. Otherwise ask to specify.
     if (visibleNpcs.length === 1) {
       targetNpc = visibleNpcs[0];
     } else {
@@ -155,151 +103,32 @@ export async function run({ jid, user, game, state, args }) {
 
   if (!targetNpc && targetRaw) {
     const options = visibleNpcs.map((n) => n.displayName || n.name || n.id);
-    const optTokens = options.map((o) =>
-      o
-        .toLowerCase()
-        .split(/[^a-z0-9]+/g)
-        .filter(Boolean)
-    );
-    const qtokAll = (targetRaw || "").toLowerCase();
-    const tokenHitsCurrent = optTokens.some((ts) =>
-      ts.some((t) => qtokAll.includes(t) || t.includes(qtokAll))
-    );
-
-    // If the query doesn't resemble anyone here, try elsewhere first
-    if (!tokenHitsCurrent && elsewhere.length) {
-      const elseOptions = elsewhere.map(
-        ({ npc }) => npc.displayName || npc.name || npc.id
+    const hitRaw = fuzzyMatch(targetRaw, options, {
+      threshold: 0.45,
+      maxResults: 1,
+    });
+    const hit = normalizeFuzzyResult(hitRaw);
+    if (typeof hit === "string" && hit.length) {
+      const hitLc = hit.toLowerCase();
+      targetNpc = visibleNpcs.find(
+        (n) => (n.displayName || n.name || n.id).toLowerCase() === hitLc
       );
-      const eHitRaw = fuzzyMatch(targetRaw, elseOptions, {
-        threshold: 0.45,
-        maxResults: 1,
-      });
-      const eHit = normalizeFuzzyResult(eHitRaw);
-      let found = null;
-      if (typeof eHit === "string" && eHit.length) {
-        const hlc = eHit.toLowerCase();
-        found = elsewhere.find(
-          ({ npc }) =>
-            (npc.displayName || npc.name || npc.id).toLowerCase() === hlc
-        );
-      }
-      if (!found) {
-        const ids2 = elsewhere.map(({ npc }) => npc.id);
-        const idRaw2 = fuzzyMatch(targetRaw, ids2, {
-          threshold: 0.45,
-          maxResults: 1,
-        });
-        const idNorm2 = normalizeFuzzyResult(idRaw2) || "";
-        const idLc2 = typeof idNorm2 === "string" ? idNorm2.toLowerCase() : "";
-        found = elsewhere.find(({ npc }) => npc.id.toLowerCase() === idLc2);
-      }
-      if (!found) {
-        const q2 = targetRaw.toLowerCase();
-        found = elsewhere.find(({ npc }) =>
-          (npc.displayName || npc.name || npc.id).toLowerCase().includes(q2)
-        );
-      }
-      if (!found) {
-        const q3 = targetRaw.toLowerCase();
-        found = elsewhere.find(({ npc }) => {
-          const label = (npc.displayName || npc.name || npc.id).toLowerCase();
-          const toks = label.split(/[^a-z0-9]+/g).filter(Boolean);
-          return toks.some((t) => q3.includes(t) || t.includes(q3));
-        });
-      }
-      if (found) {
-        state.roomId = found.roomId;
-        await sendText(jid, "You step into the adjoining room.");
-        targetNpc = found.npc;
-      }
     }
-
     if (!targetNpc) {
-      const hitRaw = fuzzyMatch(targetRaw, options, {
+      const ids = visibleNpcs.map((n) => n.id);
+      const idHitRaw = fuzzyMatch(targetRaw, ids, {
         threshold: 0.45,
         maxResults: 1,
       });
-      const hit = normalizeFuzzyResult(hitRaw);
-      if (typeof hit === "string" && hit.length) {
-        const hitLc = hit.toLowerCase();
-        targetNpc = visibleNpcs.find(
-          (n) => (n.displayName || n.name || n.id).toLowerCase() === hitLc
-        );
-      }
-
-      if (!targetNpc) {
-        const ids = visibleNpcs.map((n) => n.id);
-        const idHitRaw = fuzzyMatch(targetRaw, ids, {
-          threshold: 0.45,
-          maxResults: 1,
-        });
-        const idHit = normalizeFuzzyResult(idHitRaw) || "";
-        const idLc = typeof idHit === "string" ? idHit.toLowerCase() : "";
-        targetNpc = visibleNpcs.find((n) => n.id.toLowerCase() === idLc);
-      }
-
-      if (!targetNpc) {
-        const q = targetRaw.toLowerCase();
-        targetNpc = visibleNpcs.find((n) =>
-          (n.displayName || n.name || n.id).toLowerCase().includes(q)
-        );
-      }
-      if (!targetNpc) {
-        const qtok = targetRaw.toLowerCase();
-        targetNpc = visibleNpcs.find((n, idx) =>
-          optTokens[idx].some((t) => qtok.includes(t) || t.includes(qtok))
-        );
-      }
+      const idHit = normalizeFuzzyResult(idHitRaw) || "";
+      const idLc = typeof idHit === "string" ? idHit.toLowerCase() : "";
+      targetNpc = visibleNpcs.find((n) => n.id.toLowerCase() === idLc);
     }
-
-    // If still no match, search elsewhere rooms and hop if found
-    if (!targetNpc && elsewhere.length) {
-      const elseOptions = elsewhere.map(
-        ({ npc }) => npc.displayName || npc.name || npc.id
+    if (!targetNpc) {
+      const q = targetRaw.toLowerCase();
+      targetNpc = visibleNpcs.find((n) =>
+        (n.displayName || n.name || n.id).toLowerCase().includes(q)
       );
-      const eHitRaw = fuzzyMatch(targetRaw, elseOptions, {
-        threshold: 0.45,
-        maxResults: 1,
-      });
-      const eHit = normalizeFuzzyResult(eHitRaw);
-      let found = null;
-      if (typeof eHit === "string" && eHit.length) {
-        const hlc = eHit.toLowerCase();
-        found = elsewhere.find(
-          ({ npc }) =>
-            (npc.displayName || npc.name || npc.id).toLowerCase() === hlc
-        );
-      }
-      if (!found) {
-        const ids2 = elsewhere.map(({ npc }) => npc.id);
-        const idRaw2 = fuzzyMatch(targetRaw, ids2, {
-          threshold: 0.45,
-          maxResults: 1,
-        });
-        const idNorm2 = normalizeFuzzyResult(idRaw2) || "";
-        const idLc2 = typeof idNorm2 === "string" ? idNorm2.toLowerCase() : "";
-        found = elsewhere.find(({ npc }) => npc.id.toLowerCase() === idLc2);
-      }
-      if (!found) {
-        const q2 = targetRaw.toLowerCase();
-        found = elsewhere.find(({ npc }) =>
-          (npc.displayName || npc.name || npc.id).toLowerCase().includes(q2)
-        );
-      }
-      if (!found) {
-        const q3 = targetRaw.toLowerCase();
-        found = elsewhere.find(({ npc }) => {
-          const label = (npc.displayName || npc.name || npc.id).toLowerCase();
-          const toks = label.split(/[^a-z0-9]+/g).filter(Boolean);
-          return toks.some((t) => q3.includes(t) || t.includes(q3));
-        });
-      }
-      if (found) {
-        state.roomId = found.roomId;
-        await sendText(jid, "You step into the adjoining room.");
-        targetNpc = found.npc;
-      }
     }
   }
 
@@ -346,7 +175,37 @@ export async function run({ jid, user, game, state, args }) {
     : typeof chosen.effect === "string"
     ? [chosen.effect]
     : [];
-  applyEffects(eff, state);
+  // apply effects may grant items or set flags
+  if (eff.length) {
+    // inline minimal effect application (flags + grant items)
+    state.flags =
+      state.flags && typeof state.flags === "object" ? state.flags : {};
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
+    for (const e of eff) {
+      if (typeof e !== "string") continue;
+      if (e.startsWith("flag:")) {
+        const k = e.slice(5);
+        if (k) state.flags[k] = true;
+        continue;
+      }
+      if (e.startsWith("!flag:")) {
+        const k = e.slice(6);
+        if (k) state.flags[k] = false;
+        continue;
+      }
+      if (e.startsWith("get:") || e.startsWith("give:")) {
+        const itemId = e.split(":")[1]?.trim();
+        if (itemId && !state.inventory.includes(itemId))
+          state.inventory.push(itemId);
+      }
+      if (e.startsWith("lose:") || e.startsWith("remove:")) {
+        const itemId = e.split(":")[1]?.trim();
+        if (!itemId) continue;
+        const idx = state.inventory.indexOf(itemId);
+        if (idx >= 0) state.inventory.splice(idx, 1);
+      }
+    }
+  }
 
   state.talkedTo = Array.isArray(state.talkedTo) ? state.talkedTo : [];
   if (!state.talkedTo.includes(targetNpc.id)) state.talkedTo.push(targetNpc.id);

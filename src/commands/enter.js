@@ -69,11 +69,7 @@ export async function run({ jid, user, game, state, args }) {
   // mutate state to inside
   state.inStructure = true;
   state.structureId = target.id;
-  const firstRoom =
-    Array.isArray(target.rooms) && target.rooms.length
-      ? target.rooms[0].id
-      : null;
-  state.roomId = firstRoom;
+  state.roomId = "main";
 
   // Message 1: confirmation
   const confirmTpl =
