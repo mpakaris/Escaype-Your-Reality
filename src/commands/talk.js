@@ -91,6 +91,11 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
+  console.debug("[talk] args", {
+    raw: args,
+    joined: (args && args.join(" ")) || "",
+  });
+
   const loc = getCurrentLocation(game, state);
   const structure = getCurrentStructure(loc, state);
   const room = getCurrentRoom(structure, state);
@@ -109,7 +114,24 @@ export async function run({ jid, user, game, state, args }) {
     visibleIds.includes(n.id)
   );
 
-  if (!visibleNpcs.length) {
+  // Collect visible NPCs in other rooms of the same structure (honor visibleWhen)
+  const rooms = Array.isArray(structure.rooms) ? structure.rooms : [];
+  const elsewhere = [];
+  for (const r of rooms) {
+    if (!r || r.id === room.id) continue;
+    const entriesR = Array.isArray(r.npcs) ? r.npcs : [];
+    const idsR = entriesR
+      .map((e) => (typeof e === "string" ? { id: e } : e))
+      .filter((e) => e && e.id && condOk(e.visibleWhen, state))
+      .map((e) => e.id);
+    if (!idsR.length) continue;
+    const npcsR = (game.npcs || []).filter((n) => idsR.includes(n.id));
+    for (const n of npcsR) {
+      elsewhere.push({ npc: n, roomId: r.id });
+    }
+  }
+
+  if (!visibleNpcs.length && !elsewhere.length) {
     await sendText(jid, "No one here seems willing to talk.");
     return;
   }
@@ -133,35 +155,151 @@ export async function run({ jid, user, game, state, args }) {
 
   if (!targetNpc && targetRaw) {
     const options = visibleNpcs.map((n) => n.displayName || n.name || n.id);
-    const hitRaw = fuzzyMatch(targetRaw, options, {
-      threshold: 0.45,
-      maxResults: 1,
-    });
-    const hit = normalizeFuzzyResult(hitRaw);
-    if (typeof hit === "string" && hit.length) {
-      const hitLc = hit.toLowerCase();
-      targetNpc = visibleNpcs.find(
-        (n) => (n.displayName || n.name || n.id).toLowerCase() === hitLc
-      );
-    }
+    const optTokens = options.map((o) =>
+      o
+        .toLowerCase()
+        .split(/[^a-z0-9]+/g)
+        .filter(Boolean)
+    );
+    const qtokAll = (targetRaw || "").toLowerCase();
+    const tokenHitsCurrent = optTokens.some((ts) =>
+      ts.some((t) => qtokAll.includes(t) || t.includes(qtokAll))
+    );
 
-    if (!targetNpc) {
-      const ids = visibleNpcs.map((n) => n.id);
-      const idHitRaw = fuzzyMatch(targetRaw, ids, {
+    // If the query doesn't resemble anyone here, try elsewhere first
+    if (!tokenHitsCurrent && elsewhere.length) {
+      const elseOptions = elsewhere.map(
+        ({ npc }) => npc.displayName || npc.name || npc.id
+      );
+      const eHitRaw = fuzzyMatch(targetRaw, elseOptions, {
         threshold: 0.45,
         maxResults: 1,
       });
-      const idHit = normalizeFuzzyResult(idHitRaw) || "";
-      const idLc = typeof idHit === "string" ? idHit.toLowerCase() : "";
-      targetNpc = visibleNpcs.find((n) => n.id.toLowerCase() === idLc);
+      const eHit = normalizeFuzzyResult(eHitRaw);
+      let found = null;
+      if (typeof eHit === "string" && eHit.length) {
+        const hlc = eHit.toLowerCase();
+        found = elsewhere.find(
+          ({ npc }) =>
+            (npc.displayName || npc.name || npc.id).toLowerCase() === hlc
+        );
+      }
+      if (!found) {
+        const ids2 = elsewhere.map(({ npc }) => npc.id);
+        const idRaw2 = fuzzyMatch(targetRaw, ids2, {
+          threshold: 0.45,
+          maxResults: 1,
+        });
+        const idNorm2 = normalizeFuzzyResult(idRaw2) || "";
+        const idLc2 = typeof idNorm2 === "string" ? idNorm2.toLowerCase() : "";
+        found = elsewhere.find(({ npc }) => npc.id.toLowerCase() === idLc2);
+      }
+      if (!found) {
+        const q2 = targetRaw.toLowerCase();
+        found = elsewhere.find(({ npc }) =>
+          (npc.displayName || npc.name || npc.id).toLowerCase().includes(q2)
+        );
+      }
+      if (!found) {
+        const q3 = targetRaw.toLowerCase();
+        found = elsewhere.find(({ npc }) => {
+          const label = (npc.displayName || npc.name || npc.id).toLowerCase();
+          const toks = label.split(/[^a-z0-9]+/g).filter(Boolean);
+          return toks.some((t) => q3.includes(t) || t.includes(q3));
+        });
+      }
+      if (found) {
+        state.roomId = found.roomId;
+        await sendText(jid, "You step into the adjoining room.");
+        targetNpc = found.npc;
+      }
     }
 
-    // Fallback: substring includes
     if (!targetNpc) {
-      const q = targetRaw.toLowerCase();
-      targetNpc = visibleNpcs.find((n) =>
-        (n.displayName || n.name || n.id).toLowerCase().includes(q)
+      const hitRaw = fuzzyMatch(targetRaw, options, {
+        threshold: 0.45,
+        maxResults: 1,
+      });
+      const hit = normalizeFuzzyResult(hitRaw);
+      if (typeof hit === "string" && hit.length) {
+        const hitLc = hit.toLowerCase();
+        targetNpc = visibleNpcs.find(
+          (n) => (n.displayName || n.name || n.id).toLowerCase() === hitLc
+        );
+      }
+
+      if (!targetNpc) {
+        const ids = visibleNpcs.map((n) => n.id);
+        const idHitRaw = fuzzyMatch(targetRaw, ids, {
+          threshold: 0.45,
+          maxResults: 1,
+        });
+        const idHit = normalizeFuzzyResult(idHitRaw) || "";
+        const idLc = typeof idHit === "string" ? idHit.toLowerCase() : "";
+        targetNpc = visibleNpcs.find((n) => n.id.toLowerCase() === idLc);
+      }
+
+      if (!targetNpc) {
+        const q = targetRaw.toLowerCase();
+        targetNpc = visibleNpcs.find((n) =>
+          (n.displayName || n.name || n.id).toLowerCase().includes(q)
+        );
+      }
+      if (!targetNpc) {
+        const qtok = targetRaw.toLowerCase();
+        targetNpc = visibleNpcs.find((n, idx) =>
+          optTokens[idx].some((t) => qtok.includes(t) || t.includes(qtok))
+        );
+      }
+    }
+
+    // If still no match, search elsewhere rooms and hop if found
+    if (!targetNpc && elsewhere.length) {
+      const elseOptions = elsewhere.map(
+        ({ npc }) => npc.displayName || npc.name || npc.id
       );
+      const eHitRaw = fuzzyMatch(targetRaw, elseOptions, {
+        threshold: 0.45,
+        maxResults: 1,
+      });
+      const eHit = normalizeFuzzyResult(eHitRaw);
+      let found = null;
+      if (typeof eHit === "string" && eHit.length) {
+        const hlc = eHit.toLowerCase();
+        found = elsewhere.find(
+          ({ npc }) =>
+            (npc.displayName || npc.name || npc.id).toLowerCase() === hlc
+        );
+      }
+      if (!found) {
+        const ids2 = elsewhere.map(({ npc }) => npc.id);
+        const idRaw2 = fuzzyMatch(targetRaw, ids2, {
+          threshold: 0.45,
+          maxResults: 1,
+        });
+        const idNorm2 = normalizeFuzzyResult(idRaw2) || "";
+        const idLc2 = typeof idNorm2 === "string" ? idNorm2.toLowerCase() : "";
+        found = elsewhere.find(({ npc }) => npc.id.toLowerCase() === idLc2);
+      }
+      if (!found) {
+        const q2 = targetRaw.toLowerCase();
+        found = elsewhere.find(({ npc }) =>
+          (npc.displayName || npc.name || npc.id).toLowerCase().includes(q2)
+        );
+      }
+      if (!found) {
+        const q3 = targetRaw.toLowerCase();
+        found = elsewhere.find(({ npc }) => {
+          const label = (npc.displayName || npc.name || npc.id).toLowerCase();
+          const toks = label.split(/[^a-z0-9]+/g).filter(Boolean);
+          return toks.some((t) => q3.includes(t) || t.includes(q3));
+        });
+      }
+      if (found) {
+        state.roomId = found.roomId;
+        await sendText(jid, "You step into the adjoining room.");
+        targetNpc = found.npc;
+      }
     }
   }
 

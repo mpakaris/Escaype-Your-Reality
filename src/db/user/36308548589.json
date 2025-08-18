@@ -5,16 +5,19 @@
   "currentGameUuid": "1000",
   "currentState": {
     "1000": {
-      "chapter": 2,
+      "chapter": 3,
       "step": 0,
       "location": "3,2",
       "inStructure": true,
       "structureId": "news_floor",
-      "roomId": "reception",
+      "roomId": "editor_office",
       "inventory": [
-        "restaurant_receipt",
         "usb_hint_note",
         "safe_key",
+        "restaurant_receipt",
+        "broom_handle",
+        "chef_complaint_email",
+        "editor_note",
         "usb_drive",
         "draft_print",
         "restaurant_card"
@@ -22,25 +25,24 @@
       "visitedLocations": [],
       "flags": {
         "introSequenceSeen": true,
-        "tutorialComplete": false,
-        "didFirstMove": false,
-        "unlockedObjects": {},
         "visited_location:1,1": true,
         "visited_structure_id:apartment_unit": true,
         "visited_structure_label:journalist_s_apartment": true,
-        "chapter_1_done": true,
-        "visited_location:2,2": true,
-        "visited_structure_id:branch_floor": true,
-        "visited_structure_label:city_bank": true,
         "visited_location:3,2": true,
         "visited_structure_id:news_floor": true,
         "visited_structure_label:daily_ledger_offices": true,
-        "sophie_bank_hint": true
+        "visited_location:2,2": true,
+        "visited_structure_id:branch_floor": true,
+        "visited_structure_label:city_bank": true,
+        "chapter_1_done": true,
+        "sophie_bank_hint": true,
+        "got_editor_note": true,
+        "chapter_2_done": true
       },
       "objectivesCompleted": [],
       "activeObjective": null,
       "hintCount": 0,
-      "lastCommand": null,
+      "lastCommand": "/reset",
       "flow": {
         "active": false,
         "type": null,
@@ -48,16 +50,20 @@
         "step": 0
       },
       "talkedTo": [
-        "neighbor_mrs_kline",
+        "receptionist_sophie",
         "bank_manager_arthur",
-        "receptionist_sophie"
+        "neighbor_mrs_kline",
+        "editor_mr_hale"
       ],
       "objects": {
         "deposit_box_42": {
           "locked": false,
           "opened": true
         }
-      }
+      },
+      "introActive": true,
+      "introSeqIndex": 0,
+      "introStepIndex": 0
     }
   }
 }
