@@ -6,13 +6,13 @@ import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
 import * as exitCmd from "../commands/exit.js";
 import * as inventoryCmd from "../commands/inventory.js";
-import * as lookCmd from "../commands/look.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
 import * as openCmd from "../commands/open.js";
 import * as readCmd from "../commands/read.js";
 import * as resetCmd from "../commands/reset.js";
 import * as searchCmd from "../commands/search.js";
+import * as showCmd from "../commands/show.js";
 import * as skipCmd from "../commands/skip.js";
 import * as takeCmd from "../commands/take.js";
 import * as talkCmd from "../commands/talk.js";
@@ -190,7 +190,7 @@ const commands = {
   skip: skipCmd,
   move: moveCmd,
   enter: enterCmd,
-  look: lookCmd,
+  show: showCmd,
   check: checkCmd,
   take: takeCmd,
   inventory: inventoryCmd,
