@@ -158,17 +158,17 @@ async function loadGame(gameUUID) {
     if (tutorialRow?.data) sequences.tutorial = tutorialRow.data;
   } catch {}
 
-  // locations
-  let locations = [];
-  const entries = await fs.readdir(gameDir);
-  for (const f of entries) {
-    if (/^loc_.*\.json$/i.test(f)) {
-      const raw = await fs.readFile(path.resolve(gameDir, f), "utf-8");
-      try {
-        locations.push(JSON.parse(raw));
-      } catch {}
-    }
-  }
+  // locations (JSONL table, no fallback)
+  const locationsPath = path.resolve(gameDir, "locations.jsonl");
+  const locationRows = await readJSONL(locationsPath);
+  const locations = (locationRows || [])
+    .filter((r) => String(r.gameId) === String(gameUUID))
+    .map((r) => {
+      // Rows may already be in location shape. If a `data` wrapper exists, unwrap it.
+      if (r && r.data && typeof r.data === "object") return r.data;
+      const { gameId, ...rest } = r || {};
+      return rest;
+    });
 
   // Compose legacy game object the engine expects
   const game = {

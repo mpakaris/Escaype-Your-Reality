@@ -20,7 +20,15 @@ function formatList(items = []) {
 }
 
 function getLocationById(game, id) {
-  return (game.locations || []).find((l) => l.id === id) || null;
+  const idStr = String(id);
+  const plain = idStr.replace(",", "");
+  const comma = plain.length === 2 ? `${plain[0]},${plain[1]}` : idStr;
+  return (
+    (game.locations || []).find((l) => {
+      const lid = String(l.id);
+      return lid === plain || lid === comma;
+    }) || null
+  );
 }
 
 function pickRandom(pool = []) {
@@ -40,15 +48,17 @@ export async function run({ jid, user, game, state, args }) {
   }
 
   // Translate to cartridge id format "r,c"
-  const id = `${rc[0]},${rc[1]}`;
+  const id = rc; // plain two-digit form
   const loc = getLocationById(game, id);
   if (!loc) {
     await sendText(jid, "No such intersection. The grid goes from 11 to 33.");
     return;
   }
 
-  // Check if already at this location
-  if (state.location === id) {
+  // Check if already at this location (supports legacy "1,1" in state)
+  const current = String(state.location || "");
+  const currentPlain = current.replace(",", "");
+  if (currentPlain === id) {
     const pool = game.ui?.moveSameLocationRemarks || [];
     const fallback = ["You’re already here."];
     const remark = pickRandom(pool.length ? pool : fallback);
@@ -57,7 +67,7 @@ export async function run({ jid, user, game, state, args }) {
   }
 
   // Update state
-  state.location = id;
+  state.location = String(loc.id);
   state.inStructure = false;
   state.structureId = null;
   state.roomId = null;
