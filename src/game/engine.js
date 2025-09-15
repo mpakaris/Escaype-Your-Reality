@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import * as checkCmd from "../commands/check.js";
 import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
@@ -20,6 +21,168 @@ import { checkAndAdvanceChapter } from "../services/progress.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, "..", "..");
+
+async function readJSONL(filePath) {
+  try {
+    let raw = await fs.readFile(filePath, "utf-8");
+    if (!raw) {
+      return [];
+    }
+    // strip BOM
+    raw = raw.replace(/^\uFEFF/, "");
+    const trimmed = raw.trim();
+
+    // Fallback: allow full JSON array files for convenience
+    if (trimmed.startsWith("[")) {
+      try {
+        const arr = JSON.parse(trimmed);
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        throw e;
+      }
+    }
+
+    // JSONL path
+    const lines = raw.split(/\r?\n/);
+    const rows = [];
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      if (!line) continue; // blank
+      line = line.trim();
+      if (!line) continue;
+      if (line.startsWith("//") || line.startsWith("#")) continue; // allow comments
+      try {
+        rows.push(JSON.parse(line));
+      } catch (e) {
+        // hard fail to surface data issue
+        throw e;
+      }
+    }
+    return rows;
+  } catch (err) {
+    if (err && err.code === "ENOENT") {
+      return [];
+    }
+    throw err;
+  }
+}
+
+async function writeJSONL(filePath, rows) {
+  const txt = rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  await fs.writeFile(filePath, txt, "utf-8");
+}
+
+async function loadUser(userId) {
+  const usersPath = path.resolve(ROOT, "src", "db", "users.jsonl");
+  const statesPath = path.resolve(ROOT, "src", "db", "user_states.jsonl");
+  const users = await readJSONL(usersPath);
+  const userRow = users.find((u) => String(u.userId) === String(userId));
+  if (!userRow) {
+    throw new Error("user-not-found");
+  }
+
+  const states = await readJSONL(statesPath);
+  // Prefer active game state; fallback to first by this user
+  const activeGame = userRow.activeGame;
+  const stateRow =
+    states.find(
+      (s) =>
+        String(s.userId || s.phone) === String(userId) &&
+        (!activeGame || s.currentGameUuid === activeGame)
+    ) || states.find((s) => String(s.userId || s.phone) === String(userId));
+
+  const gameUUID = stateRow?.currentGameUuid || activeGame;
+  const state = stateRow?.currentState?.[gameUUID] || {};
+
+  // Normalize to legacy shape the engine expects
+  const legacyUser = {
+    userId: String(userId),
+    currentGameUuid: gameUUID,
+    currentState: { [gameUUID]: state },
+  };
+
+  return {
+    data: legacyUser,
+    path: statesPath,
+    _usersPath: usersPath,
+    _stateRowKey: { userId: String(userId), gameUUID },
+  };
+}
+
+async function saveUser(userObj, statesFilePath, key) {
+  const rows = await readJSONL(statesFilePath);
+  const { userId } = userObj;
+  const gameUUID = userObj.currentGameUuid;
+  // Find existing row for this user+game; if none, append new
+  let idx = rows.findIndex(
+    (r) =>
+      String(r.userId || r.phone) === String(userId) &&
+      r.currentGameUuid === gameUUID
+  );
+  const statePayload = userObj.currentState?.[gameUUID] || {};
+  const newRow = {
+    userId: String(userId),
+    currentGameUuid: gameUUID,
+    currentState: { [gameUUID]: statePayload },
+  };
+  if (idx === -1) rows.push(newRow);
+  else rows[idx] = newRow;
+  await writeJSONL(statesFilePath, rows);
+}
+
+async function loadGame(gameUUID) {
+  const gameDir = path.resolve(ROOT, "src", "db", "games", gameUUID);
+  // general
+  const generalPath = path.resolve(gameDir, "general_object.jsonl");
+  const generalRows = await readJSONL(generalPath);
+  const general =
+    generalRows.find((r) => r.gameId === gameUUID) || generalRows[0] || {};
+
+  // sequences
+  const sequences = {};
+  try {
+    const introRows = await readJSONL(path.resolve(gameDir, "intro.jsonl"));
+    const introRow =
+      introRows.find((r) => r.gameId === gameUUID) || introRows[0];
+    if (introRow?.data) sequences.intro = introRow.data;
+  } catch {}
+  try {
+    const tutorialRows = await readJSONL(
+      path.resolve(gameDir, "tutorial.jsonl")
+    );
+    const tutorialRow =
+      tutorialRows.find((r) => r.gameId === gameUUID) || tutorialRows[0];
+    if (tutorialRow?.data) sequences.tutorial = tutorialRow.data;
+  } catch {}
+
+  // locations
+  let locations = [];
+  const entries = await fs.readdir(gameDir);
+  for (const f of entries) {
+    if (/^loc_.*\.json$/i.test(f)) {
+      const raw = await fs.readFile(path.resolve(gameDir, f), "utf-8");
+      try {
+        locations.push(JSON.parse(raw));
+      } catch {}
+    }
+  }
+
+  // Compose legacy game object the engine expects
+  const game = {
+    id: gameUUID,
+    title: general.title || "",
+    ui: general.ui || {},
+    progression: general.progression || {},
+    media: general.media || {},
+    sequences,
+    locations,
+  };
+  return game;
+}
+
 const commands = {
   next: nextCmd,
   reset: resetCmd,
@@ -38,26 +201,6 @@ const commands = {
   open: openCmd,
   search: searchCmd,
 };
-
-async function loadUser(userId) {
-  const p = path.resolve(process.cwd(), "src", "db", "user", `${userId}.json`);
-  const raw = await fs.readFile(p, "utf-8");
-  return { data: JSON.parse(raw), path: p };
-}
-async function saveUser(userObj, filePath) {
-  await fs.writeFile(filePath, JSON.stringify(userObj, null, 2), "utf-8");
-}
-async function loadGame(gameUUID) {
-  const p = path.resolve(
-    process.cwd(),
-    "src",
-    "db",
-    "games",
-    `${gameUUID}.json`
-  );
-  const raw = await fs.readFile(p, "utf-8");
-  return JSON.parse(raw);
-}
 
 function getCurrentLocation(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
@@ -85,7 +228,8 @@ export async function handleIncoming({ jid, from, text }) {
   let userWrap;
   try {
     userWrap = await loadUser(userId);
-  } catch {
+  } catch (err) {
+    await sendText(jid, "Player not found. Use /start to begin.");
     return;
   }
   const user = userWrap.data;
@@ -94,7 +238,8 @@ export async function handleIncoming({ jid, from, text }) {
   let game;
   try {
     game = await loadGame(gameUUID);
-  } catch {
+  } catch (err) {
+    await sendText(jid, "Game content missing. Please try again later.");
     return;
   }
   const state =
@@ -105,17 +250,7 @@ export async function handleIncoming({ jid, from, text }) {
   const isCmd = input.startsWith("/");
   const parts = isCmd ? input.slice(1).split(/\s+/) : [];
   const cmd = parts[0]?.toLowerCase() || "";
-  if (cmd === "next") {
-    console.log("ENGINE: User sent /next", { jid, flow: state.flow });
-  }
-  if (cmd === "reset") {
-    console.log("ENGINE: User sent /reset", { jid, flow: state.flow });
-  }
-  if (cmd === "exit") {
-    console.log("ENGINE: User sent /exit", { jid, flow: state.flow });
-  }
   const args = parts.slice(1);
-  console.log("engine parsed:", { input, isCmd, cmd, flow: state.flow });
 
   if (inSequence(state)) {
     const allowed = new Set(["next", "reset", "exit"]);
@@ -128,15 +263,6 @@ export async function handleIncoming({ jid, from, text }) {
     const atStep = state.flow?.step ?? 0;
 
     if (!isCmd || !allowed.has(cmd)) {
-      console.debug("[engine] intro gate block:", {
-        input,
-        cmd,
-        allowed: Array.from(allowed),
-        flow: state.flow,
-        introLen,
-        atSeq,
-        atStep,
-      });
       const msg =
         game.ui?.templates?.unknownCommandDuringIntro ||
         "Finish the introduction first. Type */next*, */exit*, or */reset*.";
@@ -159,7 +285,6 @@ export async function handleIncoming({ jid, from, text }) {
   if (isCmd && (cmd === "reset" || cmd === "exit")) {
     const handler = commands[cmd];
     if (handler?.run) {
-      console.debug("[engine] early-dispatch", { cmd, flow: state.flow });
       await handler.run({ jid, user, game, state, args });
       // Normalize room after command side-effects
       if (state.inStructure && state.structureId) {
@@ -170,12 +295,7 @@ export async function handleIncoming({ jid, from, text }) {
         if (state.roomId) state.roomId = null;
       }
       await checkAndAdvanceChapter({ jid, game, state });
-      await saveUser(user, userWrap.path);
-      console.log("ENGINE: state saved (early)", {
-        seq: state.flow?.seq,
-        step: state.flow?.step,
-        hdr: state.flow?._headerShown,
-      });
+      await saveUser(user, userWrap.path, userWrap._stateRowKey);
       return;
     }
   }
@@ -200,7 +320,6 @@ export async function handleIncoming({ jid, from, text }) {
   }
 
   await handler.run({ jid, user, game, state, args });
-  console.debug("[engine] ran handler", { cmd, args });
   // Generic visit flags: mark location and structure visits in user state
   try {
     state.flags =
@@ -227,10 +346,5 @@ export async function handleIncoming({ jid, from, text }) {
     }
   } catch {}
   await checkAndAdvanceChapter({ jid, game, state });
-  await saveUser(user, userWrap.path);
-  console.log("ENGINE: state saved", {
-    seq: state.flow?.seq,
-    step: state.flow?.step,
-    hdr: state.flow?._headerShown,
-  });
+  await saveUser(user, userWrap.path, userWrap._stateRowKey);
 }

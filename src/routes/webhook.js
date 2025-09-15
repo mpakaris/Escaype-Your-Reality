@@ -46,15 +46,15 @@ router.post("/", async (req, res) => {
     res.status(200).json({ received: true });
 
     // Debug: dump headers and body once you reproduce
-    console.log("WEBHOOK HEADERS:", req.headers);
-    console.log("WEBHOOK RAW BODY:", JSON.stringify(req.body));
+    // console.log("WEBHOOK HEADERS:", req.headers);
+    // console.log("WEBHOOK RAW BODY:", JSON.stringify(req.body));
 
     const { jid, text } = extractJidAndText(req.body);
     console.log("WEBHOOK PARSED:", {
       jid,
       text,
       phone: req.body?.phone,
-      slotid: req.body?.slotid,
+      // slotid: req.body?.slotid,
     });
 
     if (!jid) return;
