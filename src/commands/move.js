@@ -106,10 +106,7 @@ export async function run({ jid, user, game, state, args }) {
         .replace("{structures}", structuresList)
     : `You’re at *${loc.name}*. ${flavor}\n\n*Around you:* ${structuresList}`;
 
-  const parts = [
-    `You arrived at your destination. You look around this dark city.`,
-    whereText,
-  ];
+  const parts = [`You arrived at your destination.`, whereText];
 
   if (enterableNames.length) {
     const enterSuggest = suggestEnter(enterableNames);

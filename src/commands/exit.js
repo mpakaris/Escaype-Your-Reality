@@ -1,5 +1,4 @@
 import { endSequence } from "../game/flow.js";
-import { resolveMedia } from "../services/renderer.js";
 import { sendImage, sendText } from "../services/whinself.js";
 
 function getSequences(game, type) {
@@ -7,47 +6,31 @@ function getSequences(game, type) {
   return buckets[type] || [];
 }
 
-async function sendExitToStreetSet(jid, game) {
-  // show exit image if defined
-  const onExitBo = game.media?.onExitBo;
-  if (onExitBo?.type === "image") {
-    const url = resolveMedia(game, "image", onExitBo.id || onExitBo.url);
-    if (url) await sendImage(jid, url);
-  }
+async function sendExitToStreetSet(jid, game, state) {
+  const loc = state?.location
+    ? (game.locations || []).find((l) => l.id === state.location)
+    : null;
 
-  // render exitToStreet template if available
-  const tplArr = game.ui?.templates?.exitToStreet;
-  if (Array.isArray(tplArr) && tplArr.length) {
-    const moodPool = game.ui?.streetExitMoodPool || [];
-    const prompts = game.ui?.streetExitPrompts || [];
-    const weatherPool = game.ui?.weatherPool || [];
-    const activityPool = game.ui?.activityPool || [];
-
-    const mood = moodPool.length
-      ? moodPool[Math.floor(Math.random() * moodPool.length)]
-      : "";
-    const prompt = prompts.length
-      ? prompts[Math.floor(Math.random() * prompts.length)]
-      : game.ui?.templates?.whereToNext || "Where to next?";
-    const weather = weatherPool.length
-      ? weatherPool[Math.floor(Math.random() * weatherPool.length)]
-      : "";
-    const activity = activityPool.length
-      ? activityPool[Math.floor(Math.random() * activityPool.length)]
-      : "";
-
-    for (const line of tplArr) {
-      const msg = String(line)
-        .replace("{weather}", weather)
-        .replace("{activity}", activity)
-        .replace("{mood}", mood)
-        .replace("{prompt}", prompt);
-      if (msg.trim()) await sendText(jid, msg);
+  let emitted = false;
+  if (loc) {
+    if (loc.onExitImage) {
+      try {
+        await sendImage(jid, String(loc.onExitImage), loc.name || "");
+        emitted = true;
+      } catch {}
     }
-    return;
+    if (Array.isArray(loc.onExit)) {
+      for (const line of loc.onExit) {
+        if (line && line.text) {
+          await sendText(jid, line.text);
+          emitted = true;
+        }
+      }
+    }
+    if (emitted) return;
   }
 
-  // fallback
+  // Fallback if no dedicated exit content
   await sendText(jid, game.ui?.templates?.whereToNext || "Where to next?");
 }
 
@@ -74,16 +57,46 @@ export async function run({ jid, user, game, state }) {
         state.chapter = start.pendingChapterOnExit - 1;
     }
 
-    await sendExitToStreetSet(jid, game);
+    await sendExitToStreetSet(jid, game, state);
     return;
   }
 
   // MODE 2: if already inside a structure, /exit returns to the street (same intersection)
   if (state.inStructure) {
+    const loc = state?.location
+      ? (game.locations || []).find((l) => l.id === state.location)
+      : null;
+    const struct =
+      loc && state?.structureId
+        ? (loc.structures || []).find((s) => s.id === state.structureId)
+        : null;
+
+    // Clear structure state
     state.inStructure = false;
     state.structureId = null;
     state.roomId = null;
-    await sendExitToStreetSet(jid, game);
+
+    // Prefer structure-level onExit content if present
+    if (struct && (struct.onExitImage || Array.isArray(struct.onExit))) {
+      if (struct.onExitImage) {
+        try {
+          await sendImage(
+            jid,
+            String(struct.onExitImage),
+            struct.displayName || struct.id || ""
+          );
+        } catch {}
+      }
+      if (Array.isArray(struct.onExit)) {
+        for (const line of struct.onExit) {
+          if (line && line.text) await sendText(jid, line.text);
+        }
+      }
+      return;
+    }
+
+    // Else use location-level exit content
+    await sendExitToStreetSet(jid, game, state);
     return;
   }
 
