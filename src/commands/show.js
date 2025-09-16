@@ -208,14 +208,20 @@ export async function run({ jid, user, game, state, args }) {
   if (mode === "objects") {
     await sendText(
       jid,
-      `*Objects here:*\n\n${listToBullets(objectNames, "no obvious objects.")}`
+      `*Objects at this location:*\n\n${listToBullets(
+        objectNames,
+        "no obvious objects."
+      )}`
     );
     return;
   }
   if (mode === "people") {
     await sendText(
       jid,
-      `*People here:*\n\n${listToBullets(npcNames, "no one in sight.")}`
+      `*People at this location:*\n\n${listToBullets(
+        npcNames,
+        "no one in sight."
+      )}`
     );
     return;
   }
@@ -223,9 +229,9 @@ export async function run({ jid, user, game, state, args }) {
     const tip = "\n\nTip: use */investigate <item>* to read details.";
     await sendText(
       jid,
-      `*Items here:*\n\n${listToBullets(
+      `*Items at this location:*\n\n${listToBullets(
         itemNames,
-        "no items visible at first glance."
+        "no items visible at first glance at this location."
       )}${itemNames.length ? tip : ""}`
     );
     return;

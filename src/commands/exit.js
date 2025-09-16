@@ -6,6 +6,12 @@ function getSequences(game, type) {
   return buckets[type] || [];
 }
 
+function clearActiveNpc(state) {
+  if (state && Object.prototype.hasOwnProperty.call(state, "activeNpc")) {
+    delete state.activeNpc;
+  }
+}
+
 async function sendExitToStreetSet(jid, game, state) {
   const loc = state?.location
     ? (game.locations || []).find((l) => l.id === state.location)
@@ -57,6 +63,8 @@ export async function run({ jid, user, game, state }) {
         state.chapter = start.pendingChapterOnExit - 1;
     }
 
+    clearActiveNpc(state);
+
     await sendExitToStreetSet(jid, game, state);
     return;
   }
@@ -75,6 +83,8 @@ export async function run({ jid, user, game, state }) {
     state.inStructure = false;
     state.structureId = null;
     state.roomId = null;
+
+    clearActiveNpc(state);
 
     // Prefer structure-level onExit content if present
     if (struct && (struct.onExitImage || Array.isArray(struct.onExit))) {

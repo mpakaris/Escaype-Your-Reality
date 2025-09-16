@@ -16,7 +16,7 @@ import * as searchCmd from "../commands/search.js";
 import * as showCmd from "../commands/show.js";
 import * as skipCmd from "../commands/skip.js";
 import * as takeCmd from "../commands/take.js";
-import * as talkCmd from "../commands/talk.js";
+import * as talktoCmd from "../commands/talkto.js";
 import * as useCmd from "../commands/use.js";
 import { checkAndAdvanceChapter } from "../services/progress.js";
 import { sendText } from "../services/whinself.js";
@@ -198,7 +198,7 @@ const commands = {
   read: readCmd,
   drop: dropCmd,
   use: useCmd,
-  talk: talkCmd,
+  talkto: talktoCmd,
   open: openCmd,
   search: searchCmd,
   examine: examineCmd,
@@ -438,7 +438,7 @@ export async function handleIncoming({ jid, from, text }) {
     "read",
     "drop",
     "use",
-    "talk",
+    "talkto",
     "present",
     "examine",
   ]);
