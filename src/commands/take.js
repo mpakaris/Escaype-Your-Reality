@@ -18,15 +18,37 @@ function getStruct(loc, state) {
 function getRoom(struct, state) {
   return (struct?.rooms || []).find((r) => r.id === state.roomId) || null;
 }
-function mapItemNames(game, ids) {
-  const dict = Object.fromEntries(
-    (game.items || []).map((i) => [i.id, i.displayName || i.name || i.id])
-  );
-  return (ids || []).map((id) => dict[id] || id);
-}
-function itemDisplay(game, id) {
-  const def = (game.items || []).find((i) => i.id === id);
-  return def?.displayName || def?.name || id;
+
+// maps from engine candidates, with fallbacks
+const asIndex = (v) => {
+  if (!v) return {};
+  if (Array.isArray(v)) {
+    const idx = Object.create(null);
+    for (const r of v) if (r && r.id) idx[r.id] = r;
+    return idx;
+  }
+  return v;
+};
+const getMap = (cands, key) => {
+  const c = cands || {};
+  if (key === "objects")
+    return asIndex(c.objectIndex || c.objectsIndex || c.objects);
+  if (key === "items") return asIndex(c.itemIndex || c.itemsIndex || c.items);
+  if (key === "npcs") return asIndex(c.npcIndex || c.npcsIndex || c.npcs);
+  return asIndex(c[`${key}Index`] || c[key]);
+};
+
+const prettyId = (s) =>
+  String(s || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+
+function itemDisplayFromMap(itemMap, id) {
+  const it = itemMap[id];
+  return (it && (it.displayName || it.name)) || prettyId(id);
 }
 
 function ensureObjectState(state) {
@@ -38,8 +60,7 @@ function getObjState(state, objId) {
   return state.objects[objId] || {};
 }
 
-export async function run({ jid, user, game, state, args }) {
-  // Must be inside a structure per design
+export async function run({ jid, game, state, args, candidates: candArg }) {
   if (!state.inStructure || !state.structureId) {
     await sendText(jid, "You’re not inside. Step in first with */enter*.");
     return;
@@ -59,54 +80,70 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Build candidate item ids visible/takeable **anywhere in this structure**
-  // Still respects per-user overrides (locked/opened) and excludes items already in inventory
-  const inv = Array.isArray(state.inventory) ? state.inventory : [];
-  const rooms = Array.isArray(struct.rooms) ? struct.rooms : [];
+  // candidate maps
+  const candidates = candArg || game?.candidates || {};
+  let objectMap = getMap(candidates, "objects");
+  let itemMap = getMap(candidates, "items");
+  if (!objectMap || !Object.keys(objectMap).length) {
+    objectMap = asIndex(
+      game?.objects || game?.object_catalogue || game?.catalogue?.objects || []
+    );
+  }
+  if (!itemMap || !Object.keys(itemMap).length) {
+    itemMap = asIndex(
+      game?.items || game?.item_catalogue || game?.catalogue?.items || []
+    );
+  }
 
-  // Map to remember where to remove the item from once taken
+  const inv = Array.isArray(state.inventory) ? state.inventory : [];
+
+  // Build candidates **in current room** only, respecting lock/open states
   const sources = new Map(); // id -> { type: 'room'|'object', room, object? }
   const candidateIds = new Set();
 
-  for (const r of rooms) {
-    const roomItems = Array.isArray(r.items) ? r.items : [];
-    for (const it of roomItems) {
+  // room-floor items
+  const roomItems = Array.isArray(room.items) ? room.items : [];
+  for (const it of roomItems) {
+    if (inv.includes(it)) continue;
+    candidateIds.add(it);
+    if (!sources.has(it)) sources.set(it, { type: "room", room });
+  }
+
+  // container contents if unlocked + opened
+  const objectIds = Array.isArray(room.objects) ? room.objects : [];
+  for (const oid of objectIds) {
+    const o = objectMap[oid];
+    if (!o) continue;
+    const tags = Array.isArray(o.tags) ? o.tags : [];
+    const openable = tags.includes("openable");
+    const lock = o.lock || {};
+    const oState = getObjState(state, o.id);
+    const locked =
+      typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+    const openedBase = o.states?.opened === true;
+    const opened =
+      typeof oState.opened === "boolean" ? oState.opened : openedBase;
+    if (locked) continue;
+    if (openable && !opened) continue; // not visible until opened
+    const contents = Array.isArray(o.contents) ? o.contents : [];
+    for (const it of contents) {
       if (inv.includes(it)) continue;
       candidateIds.add(it);
-      if (!sources.has(it)) sources.set(it, { type: "room", room: r });
-    }
-    const objs = Array.isArray(r.objects) ? r.objects : [];
-    for (const o of objs) {
-      const lock = o.lock || {};
-      const oState = getObjState(state, o.id);
-      const locked =
-        typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
-      const openable = (o.tags || []).includes("openable");
-      const openedBase = o.states?.opened === true;
-      const opened =
-        typeof oState.opened === "boolean" ? oState.opened : openedBase;
-      if (locked) continue;
-      if (openable && !opened) continue; // closed container, don’t expose contents
-      const contents = Array.isArray(o.contents) ? o.contents : [];
-      for (const it of contents) {
-        if (inv.includes(it)) continue;
-        candidateIds.add(it);
-        if (!sources.has(it))
-          sources.set(it, { type: "object", room: r, object: o });
-      }
+      if (!sources.has(it))
+        sources.set(it, { type: "object", room, object: o });
     }
   }
 
-  const candidates = Array.from(candidateIds);
-  if (!candidates.length) {
+  const candList = Array.from(candidateIds);
+  if (!candList.length) {
     await sendText(jid, "There’s nothing here you can take.");
     return;
   }
 
-  // Create label list for fuzzy matching
-  const itemsForMatch = candidates.map((id) => ({
+  // fuzzy resolve
+  const itemsForMatch = candList.map((id) => ({
     id,
-    label: itemDisplay(game, id),
+    label: itemDisplayFromMap(itemMap, id),
   }));
   const hit = fuzzyPickFromObjects(token, itemsForMatch, ["id", "label"], {
     threshold: 0.55,
@@ -115,7 +152,9 @@ export async function run({ jid, user, game, state, args }) {
   const target = hit?.obj?.id || null;
 
   if (!target) {
-    const list = bullets(mapItemNames(game, candidates));
+    const list = bullets(
+      candList.map((id) => `*${itemDisplayFromMap(itemMap, id)}*`)
+    );
     await sendText(
       jid,
       `Couldn’t find that to take. You can pick up:\n${list}`
@@ -123,17 +162,15 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Validate that target is a real item in the cartridge
-  const isValidItem = (game.items || []).some((i) => i.id === target);
-  if (!isValidItem) {
+  // validate target is takeable in this context (candidate list)
+  if (!candList.includes(target)) {
     await sendText(jid, "You can’t stuff that in your pocket.");
     return;
   }
 
-  // Initialize inventory
+  // init inventory
   state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
 
-  // Already have it?
   if (state.inventory.includes(target)) {
     await sendText(
       jid,
@@ -142,7 +179,7 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Remove from the correct source (room floor or specific container in its room)
+  // remove from correct source
   const src = sources.get(target);
   if (src) {
     if (src.type === "room") {
@@ -156,11 +193,12 @@ export async function run({ jid, user, game, state, args }) {
     }
   }
 
-  // Add to inventory
+  // add to inventory
   state.inventory.push(target);
 
-  const pickedName = itemDisplay(game, target);
-  const def = (game.items || []).find((i) => i.id === target);
+  const pickedName = itemDisplayFromMap(itemMap, target);
+  const def =
+    itemMap[target] || (game.items || []).find((i) => i.id === target);
   const custom = def?.messages?.take;
   if (custom) {
     await sendText(jid, custom.replace("{item}", pickedName));

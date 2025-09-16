@@ -6,11 +6,26 @@ const bullets = (arr) =>
     .map((t) => `• ${t}`)
     .join("\n");
 
+const prettyId = (s) =>
+  String(s || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+
 function mapItemNames(game, ids) {
-  const dict = Object.fromEntries(
+  const candMap = game?.candidates?.itemIndex || {};
+  const gameDict = Object.fromEntries(
     (game.items || []).map((i) => [i.id, i.displayName || i.name || i.id])
   );
-  return (ids || []).map((id) => dict[id] || id);
+  return (ids || []).map((id) => {
+    const fromCand = candMap[id]?.displayName || candMap[id]?.name;
+    if (fromCand) return fromCand;
+    const fromGame = gameDict[id];
+    if (fromGame) return fromGame;
+    return prettyId(id);
+  });
 }
 
 export async function run({ jid, user, game, state }) {
