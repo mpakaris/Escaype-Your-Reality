@@ -39,6 +39,33 @@ function prettyLabel(o) {
     .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+function isCodeToken(tok) {
+  const t = String(tok || "").trim();
+  // allow digits, letters, and common keypad symbols
+  return t.length > 0 && t.length <= 64 && /^[A-Za-z0-9#*\-_.:+]+$/.test(t);
+}
+function codeEquals(input, lock) {
+  const rawIn = String(input || "");
+  const need = lock?.requiredCode != null ? String(lock.requiredCode) : null;
+  const cs = !!lock?.caseSensitive;
+  if (Array.isArray(lock?.acceptedCodes) && lock.acceptedCodes.length) {
+    return lock.acceptedCodes.some((c) =>
+      cs ? rawIn === String(c) : normalize(rawIn) === normalize(String(c))
+    );
+  }
+  if (need != null) {
+    return cs ? rawIn === need : normalize(rawIn) === normalize(need);
+  }
+  if (lock?.codeRegex) {
+    try {
+      return new RegExp(lock.codeRegex).test(rawIn);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 function splitArgs(args) {
   const raw = (args || []).join(" ").trim();
   if (!raw) return { itemToken: "", objectToken: "" };
@@ -78,16 +105,61 @@ export async function run({ jid, user, game, state, args, candidates }) {
   }
 
   const { itemToken, objectToken } = splitArgs(args);
-  if (!itemToken) {
-    await sendText(jid, "Use what? Try */inventory* or */look objects*.");
-    return;
-  }
 
   const loc = getLoc(game, state);
   const struct = getStruct(loc, state);
   const room = getRoom(struct, state);
   if (!room) {
     await sendText(jid, "Wrong place for that.");
+    return;
+  }
+
+  // Build object candidates (current room only) from catalogue
+  const objectMap = candidates?.objectIndex || {};
+  const objectsHereIds = Array.isArray(room.objects) ? room.objects : [];
+  const hereDefs = objectsHereIds.map((oid) => objectMap[oid]).filter(Boolean);
+  const hereEntries = hereDefs.map((o) => ({
+    id: o.id,
+    label: o.displayName || o.name || o.id,
+    norm: normalize(o.displayName || o.name || o.id),
+    obj: o,
+  }));
+
+  let objHit = fuzzyPickFromObjects(
+    objectToken,
+    hereEntries,
+    ["id", "label", "norm"],
+    { threshold: 0.45, maxResults: 1 }
+  );
+  if (!objHit && !objectToken) {
+    // If no object token provided, try to infer from item token (e.g., "/use 1234 keypad")
+    objHit = fuzzyPickFromObjects(
+      itemToken,
+      hereEntries,
+      ["id", "label", "norm"],
+      { threshold: 0.45, maxResults: 1 }
+    );
+  }
+  const obj = objHit?.obj || null;
+  if (!obj) {
+    const names = hereEntries.map((e) => `*${e.label}*`).join(", ");
+    await sendText(
+      jid,
+      names
+        ? `Use it on what? Here you have: ${names}`
+        : "Use it on what? Nothing here."
+    );
+    return;
+  }
+
+  // If the matched object is missing a lock definition in this instance, recover it from catalogue
+  let effectiveObj = obj;
+  if (!effectiveObj.lock && objectMap && objectMap[obj.id]?.lock) {
+    effectiveObj = objectMap[obj.id];
+  }
+
+  if (!itemToken) {
+    await sendText(jid, "Use what? Try */inventory* or */look objects*.");
     return;
   }
 
@@ -112,57 +184,40 @@ export async function run({ jid, user, game, state, args, candidates }) {
   );
   const item = itemHit?.obj || null;
   const itemId = item?.id;
+
+  // If no inventory item matched, but the token looks like a code and the target has a code/pin lock, try it
+  if ((!item || !itemId) && isCodeToken(itemToken)) {
+    const lock = effectiveObj.lock || null;
+    const isCodeLock = lock && (lock.type === "code" || lock.type === "pin");
+    if (isCodeLock) {
+      const alreadyUnlocked =
+        (getObjState(state, effectiveObj.id).locked ?? lock.locked === true) ===
+        false;
+      if (alreadyUnlocked) {
+        await sendText(jid, `*${prettyLabel(obj)}* is already unlocked.`);
+        return;
+      }
+      if (codeEquals(itemToken, lock)) {
+        const patch = { locked: false };
+        if (lock.autoOpenOnUnlock) patch.opened = true;
+        setObjState(state, effectiveObj.id, patch);
+        if (lock.onUnlockFlag) {
+          ensureFlags(state)[lock.onUnlockFlag] = true;
+        }
+        const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
+        await sendText(jid, ok);
+        return;
+      } else {
+        const fail = lock.onCodeFail || lock.lockedHint || "Code rejected.";
+        await sendText(jid, fail);
+        return;
+      }
+    }
+  }
+
   if (!item || !itemId) {
     await sendText(jid, "You aren't holding that.");
     return;
-  }
-
-  // Build object candidates (current room only) from catalogue
-  const objectMap = candidates?.objectIndex || {};
-  const objectsHereIds = Array.isArray(room.objects) ? room.objects : [];
-  const hereDefs = objectsHereIds.map((oid) => objectMap[oid]).filter(Boolean);
-  const hereEntries = hereDefs.map((o) => ({
-    id: o.id,
-    label: o.displayName || o.name || o.id,
-    norm: normalize(o.displayName || o.name || o.id),
-    obj: o,
-  }));
-
-  let objHit = fuzzyPickFromObjects(
-    objectToken,
-    hereEntries,
-    ["id", "label", "norm"],
-    { threshold: 0.45, maxResults: 1 }
-  );
-  // If no object token provided, try to infer from item token (e.g., "/use key box")
-  if (!objHit && !objectToken) {
-    objHit = fuzzyPickFromObjects(
-      itemToken,
-      hereEntries,
-      ["id", "label", "norm"],
-      { threshold: 0.45, maxResults: 1 }
-    );
-  }
-
-  const obj = objHit?.obj || null;
-  if (!obj) {
-    const names = hereEntries.map((e) => `*${e.label}*`).join(", ");
-    await sendText(
-      jid,
-      names
-        ? `Use it on what? Here you have: ${names}`
-        : "Use it on what? Nothing here."
-    );
-    return;
-  }
-
-  // If the matched object is missing a lock definition in this instance,
-  // try to recover the lock metadata from any identical object definition
-  // within the same structure (same id). This is safe for single-room but
-  // also guards against partial data merges.
-  let effectiveObj = obj;
-  if (!effectiveObj.lock && objectMap && objectMap[obj.id]?.lock) {
-    effectiveObj = objectMap[obj.id];
   }
 
   // Debug: inspect matched object and per-user state
