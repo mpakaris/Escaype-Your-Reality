@@ -443,6 +443,7 @@ export async function handleIncoming({ jid, from, text }) {
     "talkto",
     "present",
     "examine",
+    "ask",
   ]);
 
   if (inSequence(state)) {

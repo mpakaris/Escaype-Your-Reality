@@ -12,6 +12,15 @@ function clearActiveNpc(state) {
   }
 }
 
+function markRecapsOnExit(state) {
+  if (!state || !state.npcTalk) return;
+  for (const [npcId, talk] of Object.entries(state.npcTalk)) {
+    if (talk && talk.revealed === true) {
+      talk.recapAvailable = true;
+    }
+  }
+}
+
 async function sendExitToStreetSet(jid, game, state) {
   const loc = state?.location
     ? (game.locations || []).find((l) => l.id === state.location)
@@ -64,6 +73,7 @@ export async function run({ jid, user, game, state }) {
     }
 
     clearActiveNpc(state);
+    markRecapsOnExit(state);
 
     await sendExitToStreetSet(jid, game, state);
     return;
@@ -85,6 +95,7 @@ export async function run({ jid, user, game, state }) {
     state.roomId = null;
 
     clearActiveNpc(state);
+    markRecapsOnExit(state);
 
     // Prefer structure-level onExit content if present
     if (struct && (struct.onExitImage || Array.isArray(struct.onExit))) {

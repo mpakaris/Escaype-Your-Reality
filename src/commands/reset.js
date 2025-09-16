@@ -20,6 +20,8 @@ export async function run({ jid, user, game, state }) {
     flags: {},
     objects: {},
 
+    npcTalk: {},
+    activeNpc: "",
     // Fresh intro state, do not auto-advance
     introActive: true,
     introSeqIndex: 0,

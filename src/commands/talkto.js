@@ -125,6 +125,26 @@ export async function run({ jid, user, game, state, args, candidates }) {
   }
 
   if (state.activeNpc === target.id) {
+    // ensure per-NPC talk state exists
+    state.npcTalk = state.npcTalk || {};
+    if (!state.npcTalk[target.id]) {
+      state.npcTalk[target.id] = {
+        asked: 0,
+        revealed: false,
+        closed: false,
+        history: [],
+        lastTalkChapter: null,
+        recapAvailable: false,
+      };
+    }
+
+    // If a recap is available, schedule it for the first /ask in this visit
+    const talk = state.npcTalk[target.id];
+    if (talk.revealed && talk.recapAvailable) {
+      talk.recapAwaitingAsk = true; // deliver on first /ask
+      // do not consume recap here; it will be consumed in ask.js
+    }
+
     await sendText(
       jid,
       `${
@@ -133,12 +153,31 @@ export async function run({ jid, user, game, state, args, candidates }) {
     );
     await sendText(
       jid,
-      "Use _/ask_ + _your question_ to converse.\n\nFor example:\n\n*/ask What did you see?*"
+      "Use */ask* + your question to converse. For example: */ask What did you see?*\n\n*_Be patient! The Characters need to think well before answering your questions. They are not used to talk to law enforcement._*"
     );
     return;
   }
 
   state.activeNpc = target.id;
+
+  state.npcTalk = state.npcTalk || {};
+  if (!state.npcTalk[target.id]) {
+    state.npcTalk[target.id] = {
+      asked: 0,
+      revealed: false,
+      closed: false,
+      history: [],
+      lastTalkChapter: null,
+      recapAvailable: false,
+    };
+  }
+
+  {
+    const talk = state.npcTalk[target.id];
+    if (talk.revealed && talk.recapAvailable) {
+      talk.recapAwaitingAsk = true; // will recap on first /ask
+    }
+  }
 
   const profileImg = target?.profile?.image || null;
   const profileDesc = target?.profile?.description || null;
@@ -163,6 +202,6 @@ export async function run({ jid, user, game, state, args, candidates }) {
   );
   await sendText(
     jid,
-    "Use _/ask_ + _your question_ to converse.\n\nFor example:\n\n*/ask What did you see?*"
+    "Use */ask* + your question to converse. For example: */ask What did you see?*\n\n*_Be patient! The Characters need to think well before answering your questions. They are not used to talk to law enforcement._*"
   );
 }
