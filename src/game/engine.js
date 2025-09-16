@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import askCmd from "../commands/ask.js";
 import * as checkCmd from "../commands/check.js";
 import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
@@ -202,6 +203,7 @@ const commands = {
   open: openCmd,
   search: searchCmd,
   examine: examineCmd,
+  ask: { run: askCmd },
 };
 
 function getCurrentLocation(game, state) {
