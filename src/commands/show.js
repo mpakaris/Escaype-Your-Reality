@@ -19,6 +19,11 @@ function getCurrentRoom(structure, state) {
 function unique(arr = []) {
   return Array.from(new Set((arr || []).filter(Boolean)));
 }
+function norm(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase();
+}
 
 function prettyNameFromId(id) {
   if (!id || typeof id !== "string") return id;
@@ -215,17 +220,44 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
   if (mode === "items") {
+    const tip = "\n\nTip: use */investigate <item>* to read details.";
     await sendText(
       jid,
       `*Items here:*\n\n${listToBullets(
         itemNames,
         "no items visible at first glance."
-      )}`
+      )}${itemNames.length ? tip : ""}`
     );
     return;
   }
 
   if (rawMode) {
+    // If the user typed an item name with /show, nudge them to use /investigate instead
+    const invIds = Array.isArray(state.inventory) ? state.inventory : [];
+    const hintIds = unique([...(invIds || []), ...(allItemIds || [])]);
+
+    // Build a lookup of candidate keys -> id
+    const keyToId = new Map();
+    for (const iid of hintIds) {
+      const disp = resolveDisplayName(iid, "item", game);
+      keyToId.set(norm(iid), iid);
+      keyToId.set(norm(disp), iid);
+    }
+
+    const targetId = keyToId.get(norm(rawMode));
+    if (targetId) {
+      const nm = resolveDisplayName(targetId, "item", game);
+      const tpl =
+        game.ui?.templates?.itemHint ||
+        "Items are crucial for your investigation. Carefully *{verb}* what you’ve found: */{cmd} {name}*.";
+      const msg = tpl
+        .replace("{verb}", "investigate")
+        .replace("{cmd}", "investigate")
+        .replace("{name}", nm);
+      await sendText(jid, msg);
+      return;
+    }
+
     await sendText(
       jid,
       "Your eyes wander, but focus falters. Try */show objects*, */show people*, or */show items*."

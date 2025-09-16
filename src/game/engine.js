@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import * as checkCmd from "../commands/check.js";
 import * as dropCmd from "../commands/drop.js";
 import * as enterCmd from "../commands/enter.js";
+import * as examineCmd from "../commands/examine.js";
 import * as exitCmd from "../commands/exit.js";
 import * as inventoryCmd from "../commands/inventory.js";
 import * as moveCmd from "../commands/move.js";
@@ -200,6 +201,7 @@ const commands = {
   talk: talkCmd,
   open: openCmd,
   search: searchCmd,
+  examine: examineCmd,
 };
 
 function getCurrentLocation(game, state) {
@@ -403,6 +405,7 @@ export async function handleIncoming({ jid, from, text }) {
     "use",
     "talk",
     "present",
+    "examine",
   ]);
 
   if (inSequence(state)) {
@@ -478,6 +481,14 @@ export async function handleIncoming({ jid, from, text }) {
       ensureRoomInStructure(game, state);
     }
     const ids = collectCandidateIds(game, state);
+    // Ensure catalogue rows exist for inventory items when examining
+    if (cmd === "examine") {
+      const inv = Array.isArray(state.inventory) ? state.inventory : [];
+      if (inv.length) {
+        const merged = new Set([...(ids.itemIds || []), ...inv]);
+        ids.itemIds = Array.from(merged);
+      }
+    }
     const cats = await loadCandidatesLimited(gameUUID, ids);
     if (process.env.CODING_ENV === "DEV") {
       console.debug("[candidates] room ids", ids);

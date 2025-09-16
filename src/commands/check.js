@@ -228,7 +228,14 @@ export async function run({
 
   if (itm) {
     const nm = itm.displayName || itm.name || itm.id;
-    await sendText(jid, `You check *${nm}*. Looks intact.`);
+    const tpl =
+      game.ui?.templates?.itemHint ||
+      "Items are crucial for your investigation. Carefully *{verb}* what you’ve found: */{cmd} {name}*.";
+    const msg = tpl
+      .replace("{verb}", "investigate")
+      .replace("{cmd}", "investigate")
+      .replace("{name}", nm);
+    await sendText(jid, msg);
     return;
   }
 
