@@ -320,22 +320,50 @@ async function loadCandidatesLimited(gameUUID, ids) {
   };
 
   // Merge and dedupe objects from per-game and root
-  const objectRows = await readMany(
-    tryPaths(["object_catalogue.jsonl"]),
+  // First try id-filtered read; if empty, fall back to all-by-game and filter in-memory
+  let objectRows = await readMany(
+    tryPaths([
+      "object_catalogue.jsonl",
+      "objects_catalogue.jsonl",
+      "object_catalogue.json",
+      "objects_catalogue.json",
+    ]),
     (r) => byGameAny(r) && objIds.has(rowId(r))
   );
+  if (!objectRows.length && objIds.size) {
+    const allObjRows = await readMany(
+      tryPaths([
+        "object_catalogue.jsonl",
+        "objects_catalogue.jsonl",
+        "object_catalogue.json",
+        "objects_catalogue.json",
+      ]),
+      byGameAny
+    );
+    objectRows = allObjRows.filter((r) => objIds.has(rowId(r)));
+  }
   const objects = objectRows.map(unwrap);
 
-  // Merge and dedupe npcs from per-game and root, singular/plural
+  // Merge and dedupe npcs from per-game and root, singular/plural, include .json variants
   const npcRows = await readMany(
-    tryPaths(["npcs_catalogue.jsonl", "npc_catalogue.jsonl"]),
+    tryPaths([
+      "npcs_catalogue.jsonl",
+      "npc_catalogue.jsonl",
+      "npcs_catalogue.json",
+      "npc_catalogue.json",
+    ]),
     (r) => byGameAny(r) && npcIds.has(rowId(r))
   );
   const npcs = npcRows.map(unwrap);
 
-  // Items catalogue filename can be singular or plural and may live per-game or at root
+  // Items catalogue filename can be singular or plural and may live per-game or at root, include .json variants
   const itemRows = await readMany(
-    tryPaths(["items_catalogue.jsonl", "item_catalogue.jsonl"]),
+    tryPaths([
+      "items_catalogue.jsonl",
+      "item_catalogue.jsonl",
+      "items_catalogue.json",
+      "item_catalogue.json",
+    ]),
     (r) => byGameAny(r) && itemIds.has(rowId(r))
   );
   const itemsMerged = itemRows.map(unwrap);
@@ -355,6 +383,13 @@ async function loadCandidatesLimited(gameUUID, ids) {
   for (const n of npcs) if (n && n.id) npcsById[n.id] = n;
   const npcsDedup = Object.values(npcsById);
 
+  if (process.env.CODING_ENV === "DEV") {
+    console.debug("[loadCandidatesLimited] loaded", {
+      objects: objects.length,
+      items: items.length,
+      npcs: npcsDedup.length,
+    });
+  }
   return {
     objects: objectsDedup,
     items,

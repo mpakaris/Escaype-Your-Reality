@@ -136,8 +136,14 @@ export async function run({
   const wantIds = new Set(objectIdsHere);
   const roomItemIds = here?.items || [];
 
+  // Robustly resolve object rows: use objectIndex, else fall back to candidates.objects scan
+  const candObjsArr = Array.isArray((candidates || {}).objects)
+    ? candidates.objects
+    : [];
   const objectsHere = objectIdsHere
-    .map((id) => objectMap[id])
+    .map(
+      (id) => objectMap[id] || candObjsArr.find((o) => o && o.id === id) || null
+    )
     .filter((o) => o && condOk(o.visibleWhen, state));
 
   const norm = (s) =>
@@ -208,6 +214,11 @@ export async function run({
   }
 
   if (!obj && !itm) {
+    if (process.env.CODING_ENV === "DEV") {
+      console.debug("[check] objectIdsHere", objectIdsHere);
+      console.debug("[check] objectIndex keys", Object.keys(objectMap || {}));
+      console.debug("[check] candidates.objects count", candObjsArr.length);
+    }
     let names = objectsHere.map((o) => `*${o.displayName || o.id}*`).join(", ");
     if (!names && Array.isArray(candidates.objects)) {
       const subset = candidates.objects.filter((o) => o && wantIds.has(o.id));
@@ -232,8 +243,8 @@ export async function run({
       game.ui?.templates?.itemHint ||
       "Items are crucial for your investigation. Carefully *{verb}* what you’ve found: */{cmd} {name}*.";
     const msg = tpl
-      .replace("{verb}", "investigate")
-      .replace("{cmd}", "investigate")
+      .replace("{verb}", "examine")
+      .replace("{cmd}", "examine")
       .replace("{name}", nm);
     await sendText(jid, msg);
     return;
