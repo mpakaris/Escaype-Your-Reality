@@ -1,5 +1,6 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+import { isRevealed } from "./_helpers/revealed.js";
 
 const bullets = (arr) =>
   (arr || [])
@@ -104,7 +105,7 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
   // room-floor items
   const roomItems = Array.isArray(room.items) ? room.items : [];
   for (const it of roomItems) {
-    if (inv.includes(it)) continue;
+    if (inv.includes(it) || !isRevealed(state, it)) continue;
     candidateIds.add(it);
     if (!sources.has(it)) sources.set(it, { type: "room", room });
   }
@@ -127,7 +128,7 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
     if (openable && !opened) continue; // not visible until opened
     const contents = Array.isArray(o.contents) ? o.contents : [];
     for (const it of contents) {
-      if (inv.includes(it)) continue;
+      if (inv.includes(it) || !isRevealed(state, it)) continue;
       candidateIds.add(it);
       if (!sources.has(it))
         sources.set(it, { type: "object", room, object: o });

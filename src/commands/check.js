@@ -1,5 +1,6 @@
 import { sendImage, sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+import { isRevealed } from "./_helpers/revealed.js";
 
 const asIndex = (v) => {
   if (!v) return {};
@@ -132,6 +133,7 @@ export async function run({
 
   const here = getRoom(struct, state);
   const objectIdsHere = here?.objects || [];
+  const wantIds = new Set(objectIdsHere);
   const roomItemIds = here?.items || [];
 
   const objectsHere = objectIdsHere
@@ -144,6 +146,7 @@ export async function run({
       .trim();
 
   const itemsHere = roomItemIds
+    .filter((id) => isRevealed(state, id))
     .map((id) => itemMap[id])
     .filter((it) => it && condOk(it.visibleWhen, state));
 

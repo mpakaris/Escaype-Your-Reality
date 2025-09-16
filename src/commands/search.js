@@ -1,5 +1,6 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+import { markRevealed } from "./_helpers/revealed.js";
 
 // Index helpers (copied from check.js for catalogue resolution)
 const asIndex = (v) => {
@@ -200,6 +201,11 @@ export async function run({
     await sendText(jid, `You search the *${name}*, but find nothing new.`);
     return;
   }
+  // Mark these items as revealed so they become takeable
+  try {
+    markRevealed(state, remaining);
+  } catch {}
+
   const items = remaining.map((id) => `*${nameOfItem(id, itemMap)}*`);
   await sendText(
     jid,

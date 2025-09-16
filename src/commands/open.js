@@ -1,5 +1,6 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+import { markRevealed } from "./_helpers/revealed.js";
 
 function getLoc(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
@@ -196,6 +197,11 @@ export async function run({
     await sendText(jid, `${base} It’s empty.`);
     return;
   }
+
+  // Mark these items as revealed so they become takeable
+  try {
+    markRevealed(state, remaining);
+  } catch {}
 
   const items = remaining.map((id) => `*${nameOfItem(id, itemMap)}*`);
   await sendText(jid, `${base}\nInside you find:\n${bullets(items)}`);

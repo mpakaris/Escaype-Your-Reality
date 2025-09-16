@@ -1,5 +1,6 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyMatch } from "../utils/fuzzyMatch.js";
+import { isRevealed } from "./_helpers/revealed.js";
 
 function getCurrentLocation(game, state) {
   const id = state.location;
@@ -182,13 +183,16 @@ export async function run({ jid, user, game, state, args }) {
     .map((oid) => resolveObjectRow(oid, game))
     .filter(Boolean)
     .flatMap((row) => (Array.isArray(row.contents) ? row.contents : []));
+
   const inv = Array.isArray(state.inventory)
     ? new Set(state.inventory)
     : new Set();
-  const allItemIds = unique([
-    ...(looseItems || []),
-    ...(fromObjects || []),
-  ]).filter((iid) => !inv.has(iid));
+
+  // Show only items the player has actually revealed via /search or /open
+  const allItemIds = unique([...(looseItems || []), ...(fromObjects || [])])
+    .filter((iid) => !inv.has(iid))
+    .filter((iid) => isRevealed(state, iid));
+
   const itemNames = unique(
     allItemIds.map((iid) => resolveDisplayName(iid, "item", game))
   );
