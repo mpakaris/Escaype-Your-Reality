@@ -21,7 +21,9 @@ function getStruct(loc, state) {
 function getRoom(struct, state) {
   return (struct?.rooms || []).find((r) => r.id === state.roomId) || null;
 }
-function itemDef(game, id) {
+function itemDef(game, candidates, id) {
+  const fromCats = candidates?.itemIndex?.[id];
+  if (fromCats) return fromCats;
   return (game.items || []).find((i) => i.id === id) || null;
 }
 function objectLabel(o) {
@@ -69,7 +71,7 @@ function ensureFlags(state) {
   return state.flags;
 }
 
-export async function run({ jid, user, game, state, args }) {
+export async function run({ jid, user, game, state, args, candidates }) {
   if (!state.inStructure || !state.structureId) {
     await sendText(jid, "Use that where? Step inside first with */enter*.");
     return;
@@ -92,7 +94,7 @@ export async function run({ jid, user, game, state, args }) {
   // Build inventory candidates
   const inv = Array.isArray(state.inventory) ? state.inventory : [];
   const invEntries = inv.map((id) => {
-    const def = itemDef(game, id);
+    const def = itemDef(game, candidates, id);
     const label = def?.displayName || def?.name || id;
     return {
       id,
@@ -115,12 +117,14 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Build object candidates (current room only)
-  const objectsHere = Array.isArray(room.objects) ? room.objects : [];
-  const hereEntries = objectsHere.map((o) => ({
+  // Build object candidates (current room only) from catalogue
+  const objectMap = candidates?.objectIndex || {};
+  const objectsHereIds = Array.isArray(room.objects) ? room.objects : [];
+  const hereDefs = objectsHereIds.map((oid) => objectMap[oid]).filter(Boolean);
+  const hereEntries = hereDefs.map((o) => ({
     id: o.id,
-    label: o.displayName || o.id,
-    norm: normalize(o.displayName || o.id),
+    label: o.displayName || o.name || o.id,
+    norm: normalize(o.displayName || o.name || o.id),
     obj: o,
   }));
 
@@ -157,11 +161,8 @@ export async function run({ jid, user, game, state, args }) {
   // within the same structure (same id). This is safe for single-room but
   // also guards against partial data merges.
   let effectiveObj = obj;
-  if (!effectiveObj.lock && struct && Array.isArray(struct.rooms)) {
-    const withLock = struct.rooms
-      .flatMap((r) => (Array.isArray(r.objects) ? r.objects : []))
-      .find((o) => o && o.id === obj.id && o.lock);
-    if (withLock) effectiveObj = withLock;
+  if (!effectiveObj.lock && objectMap && objectMap[obj.id]?.lock) {
+    effectiveObj = objectMap[obj.id];
   }
 
   // Debug: inspect matched object and per-user state
@@ -210,23 +211,11 @@ export async function run({ jid, user, game, state, args }) {
       const patch = { locked: false };
       if (lock.autoOpenOnUnlock) patch.opened = true;
       setObjState(state, effectiveObj.id, patch);
-      // set optional progression flag from cartridge
       if (lock.onUnlockFlag) {
         ensureFlags(state)[lock.onUnlockFlag] = true;
       }
-      // consume the item on successful use
-      if (Array.isArray(state.inventory)) {
-        const idx = state.inventory.indexOf(itemId);
-        if (idx >= 0) state.inventory.splice(idx, 1);
-      }
-      const ok =
-        item?.messages?.useSuccess ||
-        lock.onUnlockMsg ||
-        `Unlocked ${prettyLabel(obj)}.`;
+      const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
-      if (Array.isArray(obj.contents) && obj.contents.length) {
-        await sendText(jid, "You can now /check it for contents.");
-      }
       return;
     }
 
@@ -244,23 +233,11 @@ export async function run({ jid, user, game, state, args }) {
       const patch = { locked: false };
       if (lock.autoOpenOnUnlock) patch.opened = true;
       setObjState(state, effectiveObj.id, patch);
-      // set optional progression flag from cartridge
       if (lock.onUnlockFlag) {
         ensureFlags(state)[lock.onUnlockFlag] = true;
       }
-      // consume the item on successful use
-      if (Array.isArray(state.inventory)) {
-        const idx = state.inventory.indexOf(itemId);
-        if (idx >= 0) state.inventory.splice(idx, 1);
-      }
-      const ok =
-        item?.messages?.useSuccess ||
-        lock.onUnlockMsg ||
-        `Unlocked ${prettyLabel(obj)}.`;
+      const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
-      if (Array.isArray(obj.contents) && obj.contents.length) {
-        await sendText(jid, "You can now /check it for contents.");
-      }
       return;
     }
 
