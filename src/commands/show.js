@@ -19,6 +19,21 @@ function unique(arr = []) {
   return Array.from(new Set((arr || []).filter(Boolean)));
 }
 
+function prettyNameFromId(id) {
+  if (!id || typeof id !== "string") return id;
+  // normalize common separators
+  const s = id.replace(/[_\-]+/g, " ").trim();
+  // keep common tokens lowercase (of, the, and, to, a)
+  const lowerKeep = new Set(["of", "the", "and", "to", "a", "on", "in"]);
+  return s
+    .split(/\s+/)
+    .map((w, i) => {
+      if (i > 0 && lowerKeep.has(w)) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ");
+}
+
 // Evaluate generic conditions (flags, !flags, hasItem)
 function condOk(conds, state) {
   if (!Array.isArray(conds) || !conds.length) return true;
@@ -46,23 +61,78 @@ function condOk(conds, state) {
   return true;
 }
 
-function listToBullets(arr = [], empty = "none") {
+function listToBullets(arr = [], emptyMsg = "none") {
   const a = (arr || []).filter(Boolean);
-  if (!a.length) return empty;
+  if (!a.length) return emptyMsg;
   return a.map((v) => `- ${v}`).join("\n");
 }
 
-const LOOK_KEYWORDS = {
-  objects: ["objects", "object", "objs", "things", "stuff"],
-  people: ["people", "person", "npc", "npcs", "folk", "faces", "persons"],
-  items: ["item", "items", "loot", "gear", "stuff"],
+// Try several shapes where catalogues might live on `game`
+function resolveFromCatalogueArray(arr, id) {
+  if (!Array.isArray(arr)) return null;
+  const hit = arr.find((x) => x && (x.id === id || x.name === id));
+  return hit || null;
+}
+function resolveFromIndex(idx, id) {
+  if (idx && typeof idx === "object") {
+    return idx[id] || null;
+  }
+  return null;
+}
+function resolveDisplayName(id, type, game) {
+  if (!id) return null;
+  const t = String(type || "");
+  const indexKey =
+    t === "object" ? "objectIndex" : t === "item" ? "itemIndex" : "npcIndex";
+  const catKey =
+    t === "object"
+      ? "objectsCatalogue"
+      : t === "item"
+      ? "itemsCatalogue"
+      : "npcsCatalogue";
+  const arrKey = t === "object" ? "objects" : t === "item" ? "items" : "npcs";
+
+  let row = null;
+  row = resolveFromIndex(game?.[indexKey], id) || row;
+  row = resolveFromCatalogueArray(game?.[catKey], id) || row;
+  row = resolveFromCatalogueArray(game?.catalogues?.[catKey], id) || row;
+  row = resolveFromCatalogueArray(game?.[arrKey], id) || row;
+
+  const name = row?.displayName || row?.name || null;
+  return name || prettyNameFromId(id);
+}
+
+// Given an object id, try to fetch its catalogue row to access contents etc.
+function resolveObjectRow(id, game) {
+  const rowFromIdx = resolveFromIndex(game?.objectIndex, id);
+  if (rowFromIdx) return rowFromIdx;
+  const fromCat =
+    resolveFromCatalogueArray(game?.objectsCatalogue, id) ||
+    resolveFromCatalogueArray(game?.catalogues?.objectsCatalogue, id) ||
+    resolveFromCatalogueArray(game?.objects, id);
+  return fromCat || null;
+}
+
+const MODE_ALIASES = {
+  objects: new Set(["objects", "object", "objs", "things"]),
+  people: new Set(["people", "person", "npc", "npcs", "folk", "persons"]),
+  items: new Set(["item", "items", "loot", "gear"]),
 };
 function resolveLookMode(input) {
-  const q = (input || "").trim();
+  const q = String(input || "")
+    .trim()
+    .toLowerCase();
   if (!q) return null;
-  for (const [key, variants] of Object.entries(LOOK_KEYWORDS)) {
-    const hit = fuzzyMatch(q, variants, { threshold: 0.5, maxResults: 1 });
-    if (hit) return key;
+  for (const [mode, set] of Object.entries(MODE_ALIASES)) {
+    if (set.has(q)) return mode;
+  }
+  // last-resort fuzzy, but prefer exact above
+  for (const [mode, set] of Object.entries(MODE_ALIASES)) {
+    const hit = fuzzyMatch(q, Array.from(set), {
+      threshold: 0.6,
+      maxResults: 1,
+    });
+    if (hit) return mode;
   }
   return null;
 }
@@ -86,51 +156,67 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  // Filter objects by visibility conditions (e.g., visibleWhen: ["flag:rooftop_open"])
-  const visibleObjs = (room.objects || []).filter((o) =>
-    condOk(o.visibleWhen, state)
+  // Objects: room.objects can be ["objId", ...] or [{id, visibleWhen}]
+  const objEntries = Array.isArray(room.objects) ? room.objects : [];
+  const visibleObjIds = objEntries
+    .map((e) => (typeof e === "string" ? { id: e } : e))
+    .filter((e) => e && e.id && condOk(e.visibleWhen, state))
+    .map((e) => e.id);
+  const objectNames = unique(
+    visibleObjIds.map((oid) => resolveDisplayName(oid, "object", game))
   );
-  const objectNames = unique(visibleObjs.map((o) => o.displayName || o.id));
 
-  // room.npcs accepts string ids or {id, visibleWhen}
+  // People: ids -> display names via catalogue
   const npcEntries = Array.isArray(room.npcs) ? room.npcs : [];
   const visibleNpcIds = npcEntries
     .map((e) => (typeof e === "string" ? { id: e } : e))
     .filter((e) => e && e.id && condOk(e.visibleWhen, state))
     .map((e) => e.id);
   const npcNames = unique(
-    visibleNpcIds.map((nid) => {
-      const def = (game.npcs || []).find((n) => n.id === nid);
-      return def?.displayName || nid;
-    })
+    visibleNpcIds.map((nid) => resolveDisplayName(nid, "npc", game))
   );
 
-  const looseItemsHere = unique(room.items || []);
-  const itemsInsideObjectsHere = unique(
-    visibleObjs.flatMap((o) => o.contents || [])
-  );
-  const visibleItems = unique(
-    looseItemsHere.filter((it) => !itemsInsideObjectsHere.includes(it))
+  // Items: from room.items plus contents of object catalogue rows
+  const looseItems = Array.isArray(room.items) ? room.items : [];
+  const fromObjects = visibleObjIds
+    .map((oid) => resolveObjectRow(oid, game))
+    .filter(Boolean)
+    .flatMap((row) => (Array.isArray(row.contents) ? row.contents : []));
+  const inv = Array.isArray(state.inventory)
+    ? new Set(state.inventory)
+    : new Set();
+  const allItemIds = unique([
+    ...(looseItems || []),
+    ...(fromObjects || []),
+  ]).filter((iid) => !inv.has(iid));
+  const itemNames = unique(
+    allItemIds.map((iid) => resolveDisplayName(iid, "item", game))
   );
 
-  const rawMode = (args && args[0] ? args[0] : "").toLowerCase();
+  const rawMode = (args && args[0] ? String(args[0]) : "").toLowerCase();
   const mode = resolveLookMode(rawMode);
 
   if (mode === "objects") {
     await sendText(
       jid,
-      `*Objects here:*\n\n${listToBullets(objectNames, "none")}`
+      `*Objects here:*\n\n${listToBullets(objectNames, "no obvious objects.")}`
     );
     return;
   }
   if (mode === "people") {
-    await sendText(jid, `*People here:*\n\n${listToBullets(npcNames, "none")}`);
+    await sendText(
+      jid,
+      `*People here:*\n\n${listToBullets(npcNames, "no one in sight.")}`
+    );
     return;
   }
   if (mode === "items") {
     await sendText(
       jid,
-      `*Items in plain sight:*\n\n${listToBullets(visibleItems, "none")}`
+      `*Items here:*\n\n${listToBullets(
+        itemNames,
+        "no items visible at first glance."
+      )}`
     );
     return;
   }
@@ -138,19 +224,26 @@ export async function run({ jid, user, game, state, args }) {
   if (rawMode) {
     await sendText(
       jid,
-      "Your eyes wander, but focus falters. Try */look objects*, */look person*, or */look items*."
+      "Your eyes wander, but focus falters. Try */show objects*, */show people*, or */show items*."
     );
     return;
   }
 
-  // Default: summary
+  // Default summary
   const lines = [];
-  lines.push(`*Objects here:*\n\n${listToBullets(objectNames, "none")}`);
-  lines.push("");
-  lines.push(`*People here:*\n\n${listToBullets(npcNames, "none")}`);
+  lines.push(
+    `*Objects here:*\n\n${listToBullets(objectNames, "no obvious objects.")}`
+  );
   lines.push("");
   lines.push(
-    `*Items in plain sight:*\n\n${listToBullets(visibleItems, "none")}`
+    `*People here:*\n\n${listToBullets(npcNames, "no one in sight.")}`
+  );
+  lines.push("");
+  lines.push(
+    `*Items here:*\n\n${listToBullets(
+      itemNames,
+      "no items visible at first glance."
+    )}`
   );
   await sendText(jid, lines.join("\n"));
 }

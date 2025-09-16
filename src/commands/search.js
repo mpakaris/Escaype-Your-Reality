@@ -1,6 +1,25 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
+// Index helpers (copied from check.js for catalogue resolution)
+const asIndex = (v) => {
+  if (!v) return {};
+  if (Array.isArray(v)) {
+    const idx = Object.create(null);
+    for (const r of v) if (r && r.id) idx[r.id] = r;
+    return idx;
+  }
+  return v;
+};
+const getMap = (cands, key) => {
+  const c = cands || {};
+  if (key === "objects")
+    return asIndex(c.objectIndex || c.objectsIndex || c.objects);
+  if (key === "items") return asIndex(c.itemIndex || c.itemsIndex || c.items);
+  if (key === "npcs") return asIndex(c.npcIndex || c.npcsIndex || c.npcs);
+  return asIndex(c[`${key}Index`] || c[key]);
+};
+
 const hasFlag = (flags, key) => Boolean((flags || {})[key]);
 const condOk = (conds, state) =>
   !conds ||
@@ -26,13 +45,28 @@ const bullets = (arr) =>
     .filter(Boolean)
     .map((t) => `• ${t}`)
     .join("\n");
-function itemNameDict(game) {
-  return Object.fromEntries(
-    (game.items || []).map((i) => [i.id, i.displayName || i.name || i.id])
-  );
+
+const prettyId = (s) =>
+  String(s || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+
+function nameOfItem(id, itemMap) {
+  const it = itemMap[id];
+  return (it && (it.displayName || it.name)) || prettyId(id);
 }
 
-export async function run({ jid, user, game, state, args }) {
+export async function run({
+  jid,
+  user,
+  game,
+  state,
+  args,
+  candidates: candArg,
+}) {
   if (!state.inStructure || !state.structureId) {
     await sendText(jid, "You are not inside a building. Use /enter first.");
     return;
@@ -51,21 +85,73 @@ export async function run({ jid, user, game, state, args }) {
     return;
   }
 
-  const room = getRoom(struct, state);
-  const objectsHere = (room?.objects || []).filter((o) =>
-    condOk(o.visibleWhen, state)
-  );
+  const candidates = candArg || game?.candidates || {};
+  let objectMap = getMap(candidates, "objects");
+  let itemMap = getMap(candidates, "items");
+  // Fallback if engine didn’t preload candidates
+  if (!objectMap || !Object.keys(objectMap).length) {
+    objectMap = asIndex(
+      game?.objects || game?.object_catalogue || game?.catalogue?.objects || []
+    );
+  }
+  if (!itemMap || !Object.keys(itemMap).length) {
+    itemMap = asIndex(
+      game?.items || game?.item_catalogue || game?.catalogue?.items || []
+    );
+  }
 
-  // Room-only fuzzy match
-  const hit = fuzzyPickFromObjects(token, objectsHere, ["id", "displayName"], {
-    threshold: 0.55,
-    maxResults: 1,
-  });
-  const obj = hit?.obj;
+  const room = getRoom(struct, state);
+  const wantIds = new Set(room?.objects || []);
+  const fromIndex = (room?.objects || [])
+    .map((id) => objectMap[id])
+    .filter(Boolean);
+  let objectsHere = fromIndex.filter((o) => condOk(o.visibleWhen, state));
+  // Supplement from candidates array if the index missed some
+  if (Array.isArray(candidates.objects) && candidates.objects.length) {
+    const have = new Set(objectsHere.map((o) => o.id));
+    for (const o of candidates.objects) {
+      if (
+        o &&
+        wantIds.has(o.id) &&
+        !have.has(o.id) &&
+        condOk(o.visibleWhen, state)
+      ) {
+        objectsHere.push(o);
+      }
+    }
+  }
+
+  const norm = (s) =>
+    String(s || "")
+      .toLowerCase()
+      .trim();
+  const tok = norm(token);
+  let obj = objectsHere.find(
+    (o) => norm(o.id) === tok || norm(o.displayName) === tok
+  );
   if (!obj) {
-    const names = objectsHere
-      .map((o) => `*${o.displayName || o.id}*`)
-      .join(", ");
+    const hit = fuzzyPickFromObjects(
+      token,
+      objectsHere,
+      ["id", "displayName"],
+      {
+        threshold: 0.55,
+        maxResults: 1,
+      }
+    );
+    obj = hit?.obj;
+  }
+  if (!obj) {
+    let names = objectsHere.map((o) => `*${o.displayName || o.id}*`).join(", ");
+    if (!names) {
+      const fromArray = (
+        Array.isArray(candidates.objects) ? candidates.objects : []
+      ).filter((o) => o && wantIds.has(o.id));
+      if (fromArray.length)
+        names = fromArray.map((o) => `*${o.displayName || o.id}*`).join(", ");
+      if (!names && Array.isArray(room?.objects) && room.objects.length)
+        names = room.objects.map((id) => `*${prettyId(id)}*`).join(", ");
+    }
     await sendText(
       jid,
       names ? `Search what? Here you have: ${names}` : "Nothing here to search."
@@ -87,23 +173,26 @@ export async function run({ jid, user, game, state, args }) {
   const isOpened =
     typeof oState.opened === "boolean" ? oState.opened : isOpenedBase;
 
-  // If it is an openable container, redirect to /open logic
-  if (openable) {
-    if (isLocked) {
-      const hint = lock.lockedHint || "It’s locked.";
-      await sendText(jid, `*${name}* is locked. ${hint}`);
-      return;
-    }
-    await sendText(jid, `*${name}* needs */open*, not */search*.`);
+  if (openable && isLocked) {
+    await sendText(
+      jid,
+      `Hmmm, *${name}* seems locked. It will need a key or code.`
+    );
     return;
   }
 
-  if (!searchable) {
+  // If it's an openable container and not locked, require opening before searching contents
+  if (openable && !isOpened) {
+    await sendText(jid, `*${name}* is closed. Use */open* first.`);
+    return;
+  }
+
+  if (!searchable && !(openable && isOpened)) {
     await sendText(jid, `Nothing to search in *${name}*.`);
     return;
   }
 
-  // Searchable surfaces: list contents not yet in inventory
+  // Searchable surface or open container: list contents not yet in inventory
   const inv = Array.isArray(state.inventory) ? state.inventory : [];
   const contents = Array.isArray(obj.contents) ? obj.contents : [];
   const remaining = contents.filter((id) => !inv.includes(id));
@@ -111,7 +200,11 @@ export async function run({ jid, user, game, state, args }) {
     await sendText(jid, `You search the *${name}*, but find nothing new.`);
     return;
   }
-  const dict = itemNameDict(game);
-  const items = remaining.map((id) => dict[id] || id);
-  await sendText(jid, `You search the *${name}* and find:\n${bullets(items)}`);
+  const items = remaining.map((id) => `*${nameOfItem(id, itemMap)}*`);
+  await sendText(
+    jid,
+    `Happy the who shall search! The following items were found inside *${name}*:\n${bullets(
+      items
+    )}`
+  );
 }

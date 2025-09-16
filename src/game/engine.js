@@ -222,6 +222,146 @@ function ensureRoomInStructure(game, state) {
   if (!state.roomId || state.roomId !== chosen.id) state.roomId = chosen.id;
 }
 
+function getCurrentRoom(game, state) {
+  const struct = getCurrentStructure(game, state);
+  if (!struct || !Array.isArray(struct.rooms) || struct.rooms.length === 0)
+    return null;
+  const roomId = state.roomId || "main";
+  return struct.rooms.find((r) => r.id === roomId) || struct.rooms[0] || null;
+}
+
+function dedupe(arr) {
+  return Array.from(new Set((arr || []).filter(Boolean)));
+}
+
+function collectCandidateIds(game, state) {
+  const room = getCurrentRoom(game, state);
+  const objectIds = dedupe(room?.objects || []);
+  const npcIds = dedupe(room?.npcs || []);
+  // Items in plain sight (not inside objects) live on the room as `items` if present
+  const itemIds = dedupe(room?.items || []);
+  return { objectIds, npcIds, itemIds };
+}
+
+async function readJSONLFiltered(filePath, predicate) {
+  let raw = await fs.readFile(filePath, "utf-8").catch((e) => {
+    if (e && e.code === "ENOENT") return "";
+    throw e;
+  });
+  if (!raw) return [];
+  raw = raw.replace(/^\uFEFF/, "");
+  const trimmed = raw.trim();
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      return (Array.isArray(arr) ? arr : []).filter(predicate);
+    } catch {
+      return [];
+    }
+  }
+
+  const out = [];
+  const lines = raw.split(/\r?\n/);
+  for (let line of lines) {
+    line = (line || "").trim();
+    if (!line || line.startsWith("//") || line.startsWith("#")) continue;
+    try {
+      const row = JSON.parse(line);
+      if (predicate(row)) out.push(row);
+    } catch {
+      // skip bad line
+    }
+  }
+  return out;
+}
+
+function indexById(rows) {
+  const idx = Object.create(null);
+  for (const r of rows || []) {
+    if (r?.id) idx[r.id] = r;
+  }
+  return idx;
+}
+
+async function loadCandidatesLimited(gameUUID, ids) {
+  const dbDir = path.resolve(ROOT, "src", "db");
+  const gameDir = path.resolve(ROOT, "src", "db", "games", gameUUID);
+  const byGame = (r) => String(r.gameId) === String(gameUUID);
+
+  const objIds = new Set(ids.objectIds || []);
+  const npcIds = new Set(ids.npcIds || []);
+  const itemIds = new Set(ids.itemIds || []);
+
+  // Helpers to robustly read id/gameId from row or row.data
+  const rowGameId = (r) => String(r?.gameId ?? r?.data?.gameId ?? "");
+  const rowId = (r) => String(r?.id ?? r?.data?.id ?? "");
+  const byGameAny = (r) => rowGameId(r) === String(gameUUID);
+
+  function unwrap(row) {
+    if (!row) return null;
+    if (row.data && typeof row.data === "object") return row.data;
+    return row;
+  }
+
+  const tryPaths = (names) =>
+    names.map((n) => [path.resolve(gameDir, n), path.resolve(dbDir, n)]).flat();
+  const readMany = async (paths, predicate) => {
+    const acc = [];
+    for (const p of paths) {
+      try {
+        const rows = await readJSONLFiltered(p, predicate);
+        if (rows && rows.length) acc.push(...rows);
+      } catch {}
+    }
+    return acc;
+  };
+
+  // Merge and dedupe objects from per-game and root
+  const objectRows = await readMany(
+    tryPaths(["object_catalogue.jsonl"]),
+    (r) => byGameAny(r) && objIds.has(rowId(r))
+  );
+  const objects = objectRows.map(unwrap);
+
+  // Merge and dedupe npcs from per-game and root, singular/plural
+  const npcRows = await readMany(
+    tryPaths(["npcs_catalogue.jsonl", "npc_catalogue.jsonl"]),
+    (r) => byGameAny(r) && npcIds.has(rowId(r))
+  );
+  const npcs = npcRows.map(unwrap);
+
+  // Items catalogue filename can be singular or plural and may live per-game or at root
+  const itemRows = await readMany(
+    tryPaths(["items_catalogue.jsonl", "item_catalogue.jsonl"]),
+    (r) => byGameAny(r) && itemIds.has(rowId(r))
+  );
+  const itemsMerged = itemRows.map(unwrap);
+  const items = Object.values(
+    itemsMerged.reduce((acc, it) => {
+      if (it && it.id && !acc[it.id]) acc[it.id] = it;
+      return acc;
+    }, {})
+  );
+
+  // Deduplicate by id for objects and npcs as well
+  const objectsById = {};
+  for (const o of objects) if (o && o.id) objectsById[o.id] = o;
+  const objectsDedup = Object.values(objectsById);
+
+  const npcsById = {};
+  for (const n of npcs) if (n && n.id) npcsById[n.id] = n;
+  const npcsDedup = Object.values(npcsById);
+
+  return {
+    objects: objectsDedup,
+    items,
+    npcs: npcsDedup,
+    objectIndex: indexById(objectsDedup),
+    itemIndex: indexById(items),
+    npcIndex: indexById(npcsDedup),
+  };
+}
 export async function handleIncoming({ jid, from, text }) {
   if (!jid) return;
   const userId = jid.replace(/@s\.whatsapp\.net$/, "");
@@ -251,6 +391,19 @@ export async function handleIncoming({ jid, from, text }) {
   const parts = isCmd ? input.slice(1).split(/\s+/) : [];
   const cmd = parts[0]?.toLowerCase() || "";
   const args = parts.slice(1);
+
+  const needsCatalog = new Set([
+    "show",
+    "check",
+    "open",
+    "search",
+    "take",
+    "read",
+    "drop",
+    "use",
+    "talk",
+    "present",
+  ]);
 
   if (inSequence(state)) {
     const allowed = new Set(["next", "reset", "exit"]);
@@ -285,7 +438,7 @@ export async function handleIncoming({ jid, from, text }) {
   if (isCmd && (cmd === "reset" || cmd === "exit")) {
     const handler = commands[cmd];
     if (handler?.run) {
-      await handler.run({ jid, user, game, state, args });
+      await handler.run({ jid, user, game, state, args, candidates: null });
       // Normalize room after command side-effects
       if (state.inStructure && state.structureId) {
         try {
@@ -319,7 +472,43 @@ export async function handleIncoming({ jid, from, text }) {
     if (state.roomId) state.roomId = null;
   }
 
-  await handler.run({ jid, user, game, state, args });
+  if (needsCatalog.has(cmd)) {
+    // Collect only the ids present in the current room for targeted preloading
+    if (state.inStructure && state.structureId) {
+      ensureRoomInStructure(game, state);
+    }
+    const ids = collectCandidateIds(game, state);
+    const cats = await loadCandidatesLimited(gameUUID, ids);
+    if (process.env.CODING_ENV === "DEV") {
+      console.debug("[candidates] room ids", ids);
+      console.debug("[candidates] loaded counts", {
+        objects: cats.objects?.length,
+        items: cats.items?.length,
+        npcs: cats.npcs?.length,
+      });
+    }
+    // Attach narrow candidates for commands to fuzzy-match and resolve
+    const candidates = {
+      objects: cats.objects,
+      items: cats.items,
+      npcs: cats.npcs,
+      objectIndex: cats.objectIndex,
+      itemIndex: cats.itemIndex,
+      npcIndex: cats.npcIndex,
+    };
+    // Stash on game for backward compat, and pass along via context
+    game.candidates = candidates;
+  }
+
+  const ctx = {
+    jid,
+    user,
+    game,
+    state,
+    args,
+    candidates: game.candidates || null,
+  };
+  await handler.run(ctx);
   // Generic visit flags: mark location and structure visits in user state
   try {
     state.flags =

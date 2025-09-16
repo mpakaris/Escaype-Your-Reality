@@ -1,5 +1,23 @@
-import { sendText } from "../services/whinself.js";
+import { sendImage, sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+
+const asIndex = (v) => {
+  if (!v) return {};
+  if (Array.isArray(v)) {
+    const idx = Object.create(null);
+    for (const r of v) if (r && r.id) idx[r.id] = r;
+    return idx;
+  }
+  return v;
+};
+const getMap = (cands, key) => {
+  const c = cands || {};
+  if (key === "objects")
+    return asIndex(c.objectIndex || c.objectsIndex || c.objects);
+  if (key === "items") return asIndex(c.itemIndex || c.itemsIndex || c.items);
+  if (key === "npcs") return asIndex(c.npcIndex || c.npcsIndex || c.npcs);
+  return asIndex(c[`${key}Index`] || c[key]);
+};
 
 const hasFlag = (flags, key) => Boolean((flags || {})[key]);
 const condOk = (conds, state) =>
@@ -30,7 +48,51 @@ function getRoom(struct, state) {
   return (struct?.rooms || []).find((r) => r.id === state.roomId) || null;
 }
 
-export async function run({ jid, user, game, state, args }) {
+function pickCheckMessage(obj, state) {
+  const name = obj.displayName || obj.id;
+  const tags = Array.isArray(obj.tags) ? obj.tags : [];
+  const lock = obj.lock || {};
+  const oState = (state.objects && state.objects[obj.id]) || {};
+  const isLocked =
+    typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+  const isOpenable = tags.includes("openable");
+  const isOpenedBase = obj.states?.opened === true;
+  const isOpened =
+    typeof oState.opened === "boolean" ? oState.opened : isOpenedBase;
+  const msg = obj.messages || {};
+
+  // Primary: author-provided description
+  if (msg.checkSuccess) return msg.checkSuccess;
+  if (msg.checkFail) return msg.checkFail; // if author prefers a terse variant
+
+  // Fallbacks for MVP if messages are absent
+  if (isOpenable && isLocked) {
+    return `You inspect *${name}*. It appears locked.`;
+  }
+  if (isOpenable && !isOpened) {
+    return `You inspect *${name}*. It’s closed. Try */open ${name
+      .split(/\s+/)
+      .pop()
+      .toLowerCase()}*.`;
+  }
+  if (tags.includes("searchable")) {
+    return `You inspect *${name}*. Could be worth a */search*.`;
+  }
+  return `You inspect *${name}*. Nothing unusual.`;
+}
+
+export async function run({
+  jid,
+  user,
+  game,
+  state,
+  args,
+  candidates: candArg,
+}) {
+  const candidates = candArg || game?.candidates || {};
+  const objectMap = getMap(candidates, "objects");
+  const itemMap = getMap(candidates, "items");
+
   if (!state.inStructure || !state.structureId) {
     await sendText(jid, "You are not inside a building. Use /enter first.");
     return;
@@ -43,9 +105,10 @@ export async function run({ jid, user, game, state, args }) {
     const loc0 = getLoc(game, state);
     const struct0 = getStruct(loc0, state);
     const here0 = getRoom(struct0, state);
-    const objs0 = (here0?.objects || []).filter((o) =>
-      condOk(o.visibleWhen, state)
-    );
+    const objectIds = here0?.objects || [];
+    const objs0 = objectIds
+      .map((id) => objectMap[id])
+      .filter((o) => o && condOk(o.visibleWhen, state));
     if (!objs0.length) {
       await sendText(jid, "No objects to check here.");
       return;
@@ -68,87 +131,108 @@ export async function run({ jid, user, game, state, args }) {
   }
 
   const here = getRoom(struct, state);
-  const objectsHere = (here?.objects || []).filter((o) =>
-    condOk(o.visibleWhen, state)
-  );
+  const objectIdsHere = here?.objects || [];
+  const roomItemIds = here?.items || [];
 
-  const hit = fuzzyPickFromObjects(token, objectsHere, ["id", "displayName"], {
-    threshold: 0.55,
-    maxResults: 1,
-  });
-  const obj = hit?.obj;
+  const objectsHere = objectIdsHere
+    .map((id) => objectMap[id])
+    .filter((o) => o && condOk(o.visibleWhen, state));
 
+  const norm = (s) =>
+    String(s || "")
+      .toLowerCase()
+      .trim();
+
+  const itemsHere = roomItemIds
+    .map((id) => itemMap[id])
+    .filter((it) => it && condOk(it.visibleWhen, state));
+
+  let obj = null;
+  let itm = null;
+
+  const tok = norm(token);
+  // 1) Exact id or displayName
+  obj =
+    objectsHere.find(
+      (o) => norm(o.id) === tok || norm(o.displayName) === tok
+    ) || null;
+  // 2) Starts-with on displayName
   if (!obj) {
-    const names = objectsHere
-      .map((o) => `*${o.displayName || o.id}*`)
-      .join(", ");
+    obj = objectsHere.find((o) => norm(o.displayName).startsWith(tok)) || null;
+  }
+  // 3) Word-boundary contains on displayName
+  if (!obj) {
+    obj = objectsHere.find((o) => norm(o.displayName).includes(tok)) || null;
+  }
+
+  const words = tok.split(/\s+/).filter((w) => w.length >= 3);
+  const anyWordMatches =
+    tok.length >= 3 &&
+    (objectsHere.some(
+      (o) => norm(o.displayName).includes(tok) || norm(o.id).includes(tok)
+    ) ||
+      words.some((w) =>
+        objectsHere.some(
+          (o) => norm(o.displayName).includes(w) || norm(o.id).includes(w)
+        )
+      ));
+
+  // 4) Fuzzy fallback
+  if (!obj && anyWordMatches) {
+    const hitObj = fuzzyPickFromObjects(
+      token,
+      objectsHere,
+      ["id", "displayName"],
+      {
+        threshold: 0.55,
+        maxResults: 1,
+      }
+    );
+    obj = hitObj?.obj || null;
+  }
+
+  if (!obj && itemsHere.length) {
+    const hitItm = fuzzyPickFromObjects(
+      token,
+      itemsHere,
+      ["id", "displayName", "name"],
+      {
+        threshold: 0.55,
+        maxResults: 1,
+      }
+    );
+    itm = hitItm?.obj || null;
+  }
+
+  if (!obj && !itm) {
+    let names = objectsHere.map((o) => `*${o.displayName || o.id}*`).join(", ");
+    if (!names && Array.isArray(candidates.objects)) {
+      const subset = candidates.objects.filter((o) => o && wantIds.has(o.id));
+      if (subset.length)
+        names = subset.map((o) => `*${o.displayName || o.id}*`).join(", ");
+    }
+    if (!names && objectIdsHere.length) {
+      names = objectIdsHere.map((id) => `*${id}*`).join(", ");
+    }
     await sendText(
       jid,
       names
         ? `No such object here. Try one of: ${names}`
-        : "No objects to check here."
+        : "No such object here."
     );
     return;
   }
 
-  const name = obj.displayName || obj.id;
-  const lock = obj.lock || {};
-  const oState = (state.objects && state.objects[obj.id]) || {};
-  const isLocked =
-    typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
-  const isOpenable = (obj.tags || []).includes("openable");
-  const isOpenedBase = obj.states?.opened === true;
-  const isOpened =
-    typeof oState.opened === "boolean" ? oState.opened : isOpenedBase;
-
-  if (isLocked) {
-    let hint = lock.lockedHint || "";
-    if (hint)
-      hint = String(hint)
-        .replace(/^\s*(it['’]?s locked|locked)\.?\s*/i, "")
-        .trim();
-    const tail =
-      hint ||
-      (lock.type === "key"
-        ? "A key would help."
-        : lock.type === "code"
-        ? "It needs a code."
-        : lock.type === "authorization"
-        ? "You’ll need authorization."
-        : "It won't open—something’s keeping it shut.");
-    await sendText(jid, `Hmmm. *${name}* is locked. ${tail}`);
+  if (itm) {
+    const nm = itm.displayName || itm.name || itm.id;
+    await sendText(jid, `You check *${nm}*. Looks intact.`);
     return;
   }
 
-  if (isOpenable && !isOpened) {
-    await sendText(
-      jid,
-      `*${name}* isn’t locked, but it’s closed. Try */open ${name
-        .split(/\s+/)
-        .pop()
-        .toLowerCase()}*.`
-    );
-    return;
+  await sendText(jid, pickCheckMessage(obj, state));
+  if (obj.image) {
+    try {
+      await sendImage(jid, String(obj.image), obj.displayName || obj.id || "");
+    } catch {}
   }
-
-  // Open and unlocked → status only, no contents here
-  if (isOpenable && isOpened) {
-    await sendText(jid, `*${name}* is open.`);
-    return;
-  }
-
-  // Non-openable objects: generic status with search hint
-  const tags = Array.isArray(obj.tags) ? obj.tags : [];
-  const searchable = tags.includes("searchable");
-  if (searchable) {
-    await sendText(
-      jid,
-      `You check *${name}*. Looks like you could search it. Try */search ${name
-        .split(/\s+/)
-        .pop()
-        .toLowerCase()}*.`
-    );
-    return;
-  }
-  await sendText(jid, `You check *${name}*. Nothing unusual.`);
 }

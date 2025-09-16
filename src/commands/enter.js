@@ -1,4 +1,4 @@
-import { sendText } from "../services/whinself.js";
+import { sendImage, sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
 function getCurrentLocation(game, state) {
@@ -87,5 +87,16 @@ export async function run({ jid, user, game, state, args }) {
   const line = pickRandom(narratorLines);
   if (line) {
     await sendText(jid, line);
+  }
+
+  // Message 3: on-enter image if provided by the structure
+  if (target.onEnterImage) {
+    try {
+      await sendImage(
+        jid,
+        String(target.onEnterImage),
+        target.displayName || target.id || ""
+      );
+    } catch {}
   }
 }
