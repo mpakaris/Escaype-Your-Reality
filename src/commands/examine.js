@@ -222,7 +222,10 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
   const inVisibleRoomPool = visiblePool2.has(item.id);
   const revealedHere = inVisibleRoomPool && isRevealed(state, item.id);
   if (!(inInventory || revealedHere)) {
-    await sendText(jid, `No *${name}* here.`);
+    await sendText(
+      jid,
+      `You can only examine items that are in your inventory or have been revealed in this location. *${name}* is not accessible yet.`
+    );
     return;
   }
 
