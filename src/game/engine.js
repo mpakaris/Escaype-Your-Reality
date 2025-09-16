@@ -481,11 +481,12 @@ export async function handleIncoming({ jid, from, text }) {
       ensureRoomInStructure(game, state);
     }
     const ids = collectCandidateIds(game, state);
-    // Ensure catalogue rows exist for inventory items when examining
+    // Ensure catalogue rows exist for inventory and revealed items when examining
     if (cmd === "examine") {
       const inv = Array.isArray(state.inventory) ? state.inventory : [];
-      if (inv.length) {
-        const merged = new Set([...(ids.itemIds || []), ...inv]);
+      const rev = Array.isArray(state.revealedItems) ? state.revealedItems : [];
+      if (inv.length || rev.length) {
+        const merged = new Set([...(ids.itemIds || []), ...inv, ...rev]);
         ids.itemIds = Array.from(merged);
       }
     }

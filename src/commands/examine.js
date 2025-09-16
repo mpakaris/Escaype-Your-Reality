@@ -113,10 +113,37 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
     const struct = getStruct(loc, state);
     const room = getRoom(struct, state);
     const roomItems = Array.isArray(room?.items) ? room.items : [];
+    const objIds = Array.isArray(room?.objects) ? room.objects : [];
+    const objectsHere = objIds
+      .map((id) => objectMap[id])
+      .filter(Boolean)
+      .filter((o) => {
+        const tags = Array.isArray(o.tags) ? o.tags : [];
+        const openable = tags.includes("openable");
+        const lock = o.lock || {};
+        const oState = (state.objects && state.objects[o.id]) || {};
+        const locked =
+          typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+        const openedBase = o.states?.opened === true;
+        const opened =
+          typeof oState.opened === "boolean" ? oState.opened : openedBase;
+        if (locked) return false;
+        if (openable && !opened) return false;
+        return true;
+      });
+    const objectContents = objectsHere.flatMap((o) =>
+      Array.isArray(o?.contents) ? o.contents : []
+    );
+
+    // Items visible in this room = loose room items + contents of room objects
+    const visiblePool = new Set([
+      ...(roomItems || []),
+      ...(objectContents || []),
+    ]);
 
     const scopedIds = new Set([
       ...inv,
-      ...roomItems.filter((id) => isRevealed(state, id)),
+      ...Array.from(visiblePool).filter((id) => isRevealed(state, id)),
     ]);
 
     const scoped = Array.from(scopedIds)
@@ -165,12 +192,36 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
   const loc = getLoc(game, state);
   const struct = getStruct(loc, state);
   const room = getRoom(struct, state);
-  const canExamine =
-    inv.includes(item.id) ||
-    (Array.isArray(room?.items) &&
-      room.items.includes(item.id) &&
-      isRevealed(state, item.id));
-  if (!canExamine) {
+  const inInventory = inv.includes(item.id);
+  const roomItems2 = Array.isArray(room?.items) ? room.items : [];
+  const objIds2 = Array.isArray(room?.objects) ? room.objects : [];
+  const objectsHere2 = objIds2
+    .map((id) => objectMap[id])
+    .filter(Boolean)
+    .filter((o) => {
+      const tags = Array.isArray(o.tags) ? o.tags : [];
+      const openable = tags.includes("openable");
+      const lock = o.lock || {};
+      const oState = (state.objects && state.objects[o.id]) || {};
+      const locked =
+        typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
+      const openedBase = o.states?.opened === true;
+      const opened =
+        typeof oState.opened === "boolean" ? oState.opened : openedBase;
+      if (locked) return false;
+      if (openable && !opened) return false;
+      return true;
+    });
+  const objectContents2 = objectsHere2.flatMap((o) =>
+    Array.isArray(o?.contents) ? o.contents : []
+  );
+  const visiblePool2 = new Set([
+    ...(roomItems2 || []),
+    ...(objectContents2 || []),
+  ]);
+  const inVisibleRoomPool = visiblePool2.has(item.id);
+  const revealedHere = inVisibleRoomPool && isRevealed(state, item.id);
+  if (!(inInventory || revealedHere)) {
     await sendText(jid, `No *${name}* here.`);
     return;
   }
