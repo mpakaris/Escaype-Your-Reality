@@ -1,4 +1,4 @@
-import { sendImage, sendText } from "../services/whinself.js";
+import { sendImage, sendText, sendVideo } from "../services/whinself.js";
 
 function norm(s) {
   return String(s || "")
@@ -124,44 +124,7 @@ export async function run({ jid, user, game, state, args, candidates }) {
     }
   }
 
-  if (state.activeNpc === target.id) {
-    // ensure per-NPC talk state exists
-    state.npcTalk = state.npcTalk || {};
-    if (!state.npcTalk[target.id]) {
-      state.npcTalk[target.id] = {
-        asked: 0,
-        revealed: false,
-        closed: false,
-        history: [],
-        lastTalkChapter: null,
-        recapAvailable: false,
-        recapAwaitingAsk: false,
-        usedClues: [],
-      };
-    }
-
-    // If a recap is available, schedule it for the first /ask in this visit
-    const talk = state.npcTalk[target.id];
-    if (talk.revealed && talk.recapAvailable) {
-      talk.recapAwaitingAsk = true; // deliver on first /ask
-      // do not consume recap here; it will be consumed in ask.js
-    }
-
-    await sendText(
-      jid,
-      `${
-        target.displayName || target.name || target.id
-      } is set as active conversation partner.`
-    );
-    await sendText(
-      jid,
-      "Use */ask* + your question to converse. For example: */ask What did you see?*\n\n*_Be patient! The Characters need to think well before answering your questions. They are not used to talk to law enforcement._*"
-    );
-    return;
-  }
-
-  state.activeNpc = target.id;
-
+  // Ensure per-NPC talk state exists with extended defaults
   state.npcTalk = state.npcTalk || {};
   if (!state.npcTalk[target.id]) {
     state.npcTalk[target.id] = {
@@ -173,43 +136,100 @@ export async function run({ jid, user, game, state, args, candidates }) {
       recapAvailable: false,
       recapAwaitingAsk: false,
       usedClues: [],
+      firstMet: false,
+      visits: 0,
+      lastVisitAt: null,
     };
   }
+  const talk = state.npcTalk[target.id];
 
-  {
-    const talk = state.npcTalk[target.id];
+  state.flags = state.flags || {};
+  const metFlagKey = `met_npc:${target.id}`;
+  const alreadyMet = talk.firstMet || !!state.flags[metFlagKey];
+
+  if (state.activeNpc === target.id) {
+    // Already active NPC - short confirmation flow
     if (talk.revealed && talk.recapAvailable) {
-      talk.recapAwaitingAsk = true; // will recap on first /ask
+      talk.recapAwaitingAsk = true; // deliver on first /ask
     }
-  }
-
-  const profileImg =
-    (target?.profile?.images &&
-      (target.profile.images.headshot || target.profile.images.fullBody)) ||
-    target?.profile?.image ||
-    null;
-  const profileDesc = target?.profile?.description || null;
-  if (profileImg) {
-    try {
-      await sendImage(
-        jid,
-        profileImg,
+    await sendText(
+      jid,
+      `${
         target.displayName || target.name || target.id
-      );
-    } catch {}
-  }
-  if (profileDesc) {
-    await sendText(jid, profileDesc);
+      } is set as active conversation partner.`
+    );
+    return;
   }
 
-  await sendText(
-    jid,
-    `${
-      target.displayName || target.name || target.id
-    } is set as active conversation partner.`
-  );
-  await sendText(
-    jid,
-    "Use */ask* + your question to converse. For example: */ask What did you see?*\n\n*_Be patient! The Characters need to think well before answering your questions. They are not used to talk to law enforcement._*"
-  );
+  // New active NPC
+  state.activeNpc = target.id;
+
+  if (!alreadyMet) {
+    // First contact
+    const narr = target?.profile?.narrator || {};
+    if (narr.intro?.videoUrl) {
+      try {
+        await sendVideo(jid, narr.intro.videoUrl);
+      } catch {}
+    }
+    let imgUrl = null;
+    if (narr.intro?.image === "fullBody" && target.profile?.images?.fullBody) {
+      imgUrl = target.profile.images.fullBody;
+    } else if (
+      narr.intro?.image === "headshot" &&
+      target.profile?.images?.headshot
+    ) {
+      imgUrl = target.profile.images.headshot;
+    } else {
+      imgUrl =
+        target.profile?.images?.headshot ||
+        target.profile?.images?.fullBody ||
+        target.profile?.image ||
+        null;
+    }
+    if (imgUrl) {
+      try {
+        await sendImage(
+          jid,
+          imgUrl,
+          target.displayName || target.name || target.id
+        );
+      } catch {}
+    }
+    talk.firstMet = true;
+    state.flags[metFlagKey] = true;
+    talk.visits++;
+    talk.lastVisitAt = Date.now();
+  } else {
+    // Re-contact, not firstMet
+    if (talk.revealed && talk.recapAvailable) {
+      talk.recapAwaitingAsk = true;
+    }
+    const narr = target.profile.narrator || {};
+    if (narr.revisit?.text) {
+      await sendText(jid, narr.revisit.text);
+    }
+    let imgUrl =
+      target.profile?.images?.headshot ||
+      target.profile?.images?.fullBody ||
+      target.profile?.image ||
+      null;
+    if (imgUrl) {
+      try {
+        await sendImage(
+          jid,
+          imgUrl,
+          target.displayName || target.name || target.id
+        );
+      } catch {}
+    }
+    talk.visits++;
+    talk.lastVisitAt = Date.now();
+    await sendText(
+      jid,
+      `${
+        target.displayName || target.name || target.id
+      } is set as active conversation partner.`
+    );
+  }
 }
