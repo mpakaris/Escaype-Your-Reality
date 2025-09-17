@@ -1,4 +1,5 @@
 import { sendImage, sendText, sendVideo } from "../services/whinself.js";
+import { setFlag } from "./_helpers/flagNormalization.js";
 
 function norm(s) {
   return String(s || "")
@@ -143,11 +144,18 @@ export async function run({ jid, user, game, state, args, candidates }) {
   }
   const talk = state.npcTalk[target.id];
 
-  state.flags = state.flags || {};
   const metFlagKey = `met_npc:${target.id}`;
-  const alreadyMet = talk.firstMet || !!state.flags[metFlagKey];
+  const alreadyMet =
+    talk.firstMet || !!(state.flags && state.flags[metFlagKey]);
 
   if (state.activeNpc === target.id) {
+    state.activeNpcId = target.id;
+    state.npcAskCount =
+      state.npcAskCount && typeof state.npcAskCount === "object"
+        ? state.npcAskCount
+        : {};
+    if (typeof state.npcAskCount[target.id] !== "number")
+      state.npcAskCount[target.id] = 0;
     // Already active NPC - short confirmation flow
     if (talk.revealed && talk.recapAvailable) {
       talk.recapAwaitingAsk = true; // deliver on first /ask
@@ -163,6 +171,14 @@ export async function run({ jid, user, game, state, args, candidates }) {
 
   // New active NPC
   state.activeNpc = target.id;
+  state.activeNpcId = target.id; // keep compatibility with /ask
+  state.npcAskCount =
+    state.npcAskCount && typeof state.npcAskCount === "object"
+      ? state.npcAskCount
+      : {};
+  if (typeof state.npcAskCount[target.id] !== "number") {
+    state.npcAskCount[target.id] = 0;
+  }
 
   if (!alreadyMet) {
     // First contact
@@ -197,7 +213,8 @@ export async function run({ jid, user, game, state, args, candidates }) {
       } catch {}
     }
     talk.firstMet = true;
-    state.flags[metFlagKey] = true;
+    setFlag(state, metFlagKey, true);
+    state.npcAskCount[target.id] = 0;
     talk.visits++;
     talk.lastVisitAt = Date.now();
   } else {
@@ -222,6 +239,14 @@ export async function run({ jid, user, game, state, args, candidates }) {
           target.displayName || target.name || target.id
         );
       } catch {}
+    }
+    state.npcAskCount =
+      state.npcAskCount && typeof state.npcAskCount === "object"
+        ? state.npcAskCount
+        : {};
+    if (typeof state.npcAskCount[target.id] !== "number") {
+      state.npcAskCount[target.id] =
+        typeof talk.asked === "number" ? talk.asked : 0;
     }
     talk.visits++;
     talk.lastVisitAt = Date.now();

@@ -1,6 +1,7 @@
 import { classifyNpcReply } from "../services/api/openai.js";
 import { sendText, sendVideo } from "../services/whinself.js";
 import { isInputTooLong } from "./_helpers/validateInputLength.js";
+import { setFlag } from "./_helpers/flagNormalization.js";
 
 function norm(s) {
   return String(s || "").trim();
@@ -101,6 +102,9 @@ export default async function askCommand({ jid, args, state, candidates }) {
       await sendText(jid, "I already told you what I heard.");
     }
 
+    // mark progression: truth unlocked for this NPC
+    setFlag(state, `truth_unlocked_npc:${activeNpcId}`);
+
     state.npcTalk[activeNpcId] = {
       asked: 1,
       revealed: true,
@@ -166,6 +170,9 @@ export default async function askCommand({ jid, args, state, candidates }) {
         "I heard two men fighting; one ran off in a white coat. That's all I know."
       );
     }
+
+    // mark progression: truth unlocked for this NPC
+    setFlag(state, `truth_unlocked_npc:${activeNpcId}`);
 
     state.npcTalk[activeNpcId] = {
       asked: askedSoFar + 1,

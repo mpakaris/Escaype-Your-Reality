@@ -1,4 +1,4 @@
-import { sendText } from "../services/whinself.js";
+import { sendText, sendVideo } from "../services/whinself.js";
 
 function ensure(obj, key, fallback) {
   if (!obj[key] || typeof obj[key] !== typeof fallback) obj[key] = fallback;
@@ -10,38 +10,39 @@ function hasAll(haystack = [], needles = []) {
   return (needles || []).every((n) => set.has(n));
 }
 
-function chapterRequirementsSatisfied({ game, state, chapter }) {
-  const cfg = game?.progression?.chapters?.[String(chapter)];
-  if (!cfg || !cfg.requires) return false; // nothing to satisfy
-  const req = cfg.requires;
+function hasFlag(state, id) {
+  return !!(state?.flags && state.flags[id]);
+}
+function hasItem(state, id) {
+  return Array.isArray(state?.inventory) && state.inventory.includes(id);
+}
 
-  // Normalize state
-  ensure(state, "flags", {});
-  ensure(state, "inventory", []);
-  ensure(state, "talkedTo", []);
+export function evaluateRequirements(state, requires) {
+  if (!requires || typeof requires !== "object") return false;
 
-  // Check basic keys if present
-  if (req.location && state.location !== req.location) return false;
+  if (requires.location && state.location !== requires.location) return false;
   if (
-    typeof req.inStructure === "boolean" &&
-    !!state.inStructure !== !!req.inStructure
-  )
-    return false;
-  if (Array.isArray(req.items) && !hasAll(state.inventory, req.items))
-    return false;
-  if (Array.isArray(req.talkedTo) && !hasAll(state.talkedTo, req.talkedTo))
-    return false;
-
-  // Optional flags: all must be true
-  if (
-    Array.isArray(req.flags) &&
-    !hasAll(
-      Object.keys(state.flags).filter((k) => state.flags[k]),
-      req.flags
-    )
+    typeof requires.inStructure === "boolean" &&
+    state.inStructure !== requires.inStructure
   )
     return false;
 
+  if (Array.isArray(requires.items)) {
+    for (const id of requires.items) if (!hasItem(state, id)) return false;
+  }
+  if (Array.isArray(requires.flags)) {
+    for (const id of requires.flags) if (!hasFlag(state, id)) return false;
+  }
+  if (Array.isArray(requires.talkedTo)) {
+    const legacy = Array.isArray(state.talkedTo) ? state.talkedTo : [];
+    for (const npc of requires.talkedTo) {
+      const met =
+        legacy.includes(npc) ||
+        hasFlag(state, `met_npc:${npc}`) ||
+        hasFlag(state, `truth_unlocked_npc:${npc}`);
+      if (!met) return false;
+    }
+  }
   return true;
 }
 
@@ -62,17 +63,24 @@ export async function checkAndAdvanceChapter({ jid, game, state }) {
   ensure(state, "flags", {});
   if (state.flags[doneFlag]) return false;
 
-  const ok = chapterRequirementsSatisfied({ game, state, chapter });
+  const requires = game?.progression?.chapters?.[String(chapter)]?.requires;
+  const ok = evaluateRequirements(state, requires);
   if (!ok) return false;
 
-  const summary =
-    cfg.summaryTpl ||
-    `Chapter ${chapter} complete. The city shifts. New leads emerge.`;
-
-  await sendText(jid, summary);
+  if (cfg.summaryVideo) {
+    await sendVideo(jid, cfg.summaryVideo);
+  } else {
+    const summary =
+      cfg.summaryTpl ||
+      `Chapter ${chapter} complete. The city shifts. New leads emerge.`;
+    await sendText(jid, summary);
+  }
 
   // mark and advance
   state.flags[doneFlag] = true;
+  if (!Array.isArray(state.chaptersCompleted)) state.chaptersCompleted = [];
+  if (!state.chaptersCompleted.includes(chapter))
+    state.chaptersCompleted.push(chapter);
   state.chapter = chapter + 1;
   return true;
 }

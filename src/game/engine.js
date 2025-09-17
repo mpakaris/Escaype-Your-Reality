@@ -424,6 +424,8 @@ export async function handleIncoming({ jid, from, text }) {
   const state =
     (user.currentState && user.currentState[gameUUID]) ||
     (user.currentState[gameUUID] = {});
+  // Ensure command event log exists
+  if (!Array.isArray(state.log)) state.log = [];
 
   const input = (text || "").trim();
   const isCmd = input.startsWith("/");
@@ -480,6 +482,16 @@ export async function handleIncoming({ jid, from, text }) {
     const handler = commands[cmd];
     if (handler?.run) {
       await handler.run({ jid, user, game, state, args, candidates: null });
+      // Log command event
+      state.log.push({
+        t: Date.now(),
+        cmd,
+        args,
+        location: state.location || null,
+        inStructure: !!state.inStructure,
+        structureId: state.structureId || null,
+      });
+      if (state.log.length > 1000) state.log = state.log.slice(-1000);
       // Normalize room after command side-effects
       if (state.inStructure && state.structureId) {
         try {
@@ -584,6 +596,16 @@ export async function handleIncoming({ jid, from, text }) {
       }
     }
   } catch {}
+  // Log command event
+  state.log.push({
+    t: Date.now(),
+    cmd,
+    args,
+    location: state.location || null,
+    inStructure: !!state.inStructure,
+    structureId: state.structureId || null,
+  });
+  if (state.log.length > 1000) state.log = state.log.slice(-1000);
   await checkAndAdvanceChapter({ jid, game, state });
   await saveUser(user, userWrap.path, userWrap._stateRowKey);
 }

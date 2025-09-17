@@ -1,6 +1,7 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { markRevealed } from "./_helpers/revealed.js";
+import { setFlag } from "./_helpers/flagNormalization.js";
 
 function getLoc(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
@@ -190,6 +191,8 @@ export async function run({
 
   if (!isOpened) {
     setObjState(state, obj.id, { opened: true });
+    // progression: record opened_object flag on first open
+    setFlag(state, `opened_object:${obj.id}`);
   }
 
   const base = msg.openSuccess || `You open the *${name}*.`;

@@ -1,6 +1,7 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { isRevealed } from "./_helpers/revealed.js";
+import { setFlag } from "./_helpers/flagNormalization.js";
 
 const bullets = (arr) =>
   (arr || [])
@@ -196,6 +197,8 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
 
   // add to inventory
   state.inventory.push(target);
+  // progression: mark possession flag for content that uses flags instead of inventory checks
+  setFlag(state, `has_item:${target}`);
 
   const pickedName = itemDisplayFromMap(itemMap, target);
   const def =

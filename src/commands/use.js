@@ -1,5 +1,6 @@
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
+import { setFlag } from "./_helpers/flagNormalization.js";
 
 function normalize(s = "") {
   return s
@@ -90,12 +91,6 @@ function setObjState(state, objId, patch) {
   state.objects =
     state.objects && typeof state.objects === "object" ? state.objects : {};
   state.objects[objId] = { ...(state.objects[objId] || {}), ...(patch || {}) };
-}
-
-function ensureFlags(state) {
-  state.flags =
-    state.flags && typeof state.flags === "object" ? state.flags : {};
-  return state.flags;
 }
 
 export async function run({ jid, user, game, state, args, candidates }) {
@@ -201,9 +196,9 @@ export async function run({ jid, user, game, state, args, candidates }) {
         const patch = { locked: false };
         if (lock.autoOpenOnUnlock) patch.opened = true;
         setObjState(state, effectiveObj.id, patch);
-        if (lock.onUnlockFlag) {
-          ensureFlags(state)[lock.onUnlockFlag] = true;
-        }
+        if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
+        if (patch.opened === true)
+          setFlag(state, `opened_object:${effectiveObj.id}`);
         const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
         await sendText(jid, ok);
         return;
@@ -266,9 +261,9 @@ export async function run({ jid, user, game, state, args, candidates }) {
       const patch = { locked: false };
       if (lock.autoOpenOnUnlock) patch.opened = true;
       setObjState(state, effectiveObj.id, patch);
-      if (lock.onUnlockFlag) {
-        ensureFlags(state)[lock.onUnlockFlag] = true;
-      }
+      if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
+      if (patch.opened === true)
+        setFlag(state, `opened_object:${effectiveObj.id}`);
       const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
       return;
@@ -288,9 +283,9 @@ export async function run({ jid, user, game, state, args, candidates }) {
       const patch = { locked: false };
       if (lock.autoOpenOnUnlock) patch.opened = true;
       setObjState(state, effectiveObj.id, patch);
-      if (lock.onUnlockFlag) {
-        ensureFlags(state)[lock.onUnlockFlag] = true;
-      }
+      if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
+      if (patch.opened === true)
+        setFlag(state, `opened_object:${effectiveObj.id}`);
       const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
       return;
