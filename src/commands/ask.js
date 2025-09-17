@@ -1,10 +1,17 @@
-import { askOpenAI } from "../services/api/openai.js";
-import { sendText } from "../services/whinself.js";
-import { getGenericAIPrompt } from "./_helpers/aiGenericComponent.js";
+import { classifyNpcReply } from "../services/api/openai.js";
+import { sendText, sendVideo } from "../services/whinself.js";
 import { isInputTooLong } from "./_helpers/validateInputLength.js";
 
 function norm(s) {
   return String(s || "").trim();
+}
+
+function pickByType(arr, type) {
+  if (!Array.isArray(arr)) return null;
+  const idx = arr.findIndex(
+    (e) => e && String(e.type).toLowerCase() === String(type).toLowerCase()
+  );
+  return idx >= 0 ? { index: idx + 1, entry: arr[idx] } : null;
 }
 
 export default async function askCommand({ jid, args, state, candidates }) {
@@ -17,6 +24,7 @@ export default async function askCommand({ jid, args, state, candidates }) {
 
   const q = norm(question);
 
+  // Length guard (narrator videos later)
   if (isInputTooLong(q)) {
     await sendText(
       jid,
@@ -25,7 +33,7 @@ export default async function askCommand({ jid, args, state, candidates }) {
     return;
   }
 
-  // Require an active NPC
+  // Require an active NPC in room
   const activeNpcId = state?.activeNpc || null;
   const npcIndex = (candidates && candidates.npcIndex) || {};
   const npc = activeNpcId ? npcIndex[activeNpcId] : null;
@@ -33,12 +41,12 @@ export default async function askCommand({ jid, args, state, candidates }) {
   if (!npc) {
     await sendText(
       jid,
-      "No active conversation partner selected.\n\n> Use */show people* to see who else is in the room with you.\n\n> Use */talkto <name>* to choose a person\n\n> Use */ask* <question> to talk."
+      "No active conversation partner selected.\n\n> Use */show people* to see who's here.\n\n> Use */talkto <name>* to choose a person\n\n> Then */ask <question>* to talk."
     );
     return;
   }
 
-  // Per-NPC talk state with history and closing
+  // Ensure talk state
   state.npcTalk = state.npcTalk || {};
   const existing = state.npcTalk[activeNpcId] || {};
   const talk = {
@@ -46,19 +54,20 @@ export default async function askCommand({ jid, args, state, candidates }) {
     revealed: !!existing.revealed,
     closed: !!existing.closed,
     history: Array.isArray(existing.history)
-      ? existing.history.slice(0, 10)
+      ? existing.history.slice(0, 20)
       : [],
     lastTalkChapter: existing.lastTalkChapter || null,
     recapAwaitingAsk: !!existing.recapAwaitingAsk,
+    recapAvailable: !!existing.recapAvailable,
+    usedClues: Array.isArray(existing.usedClues)
+      ? existing.usedClues.slice()
+      : [],
   };
-  talk.usedClues = Array.isArray(existing.usedClues)
-    ? existing.usedClues.slice()
-    : [];
 
-  const cap = 5; // unified cap
-
-  // Chapter handling and reopen in later chapters
+  const cap = 5; // questions per visit
   const chapter = state.chapter || 1;
+
+  // Re-open on higher chapter
   if (
     talk.closed &&
     talk.lastTalkChapter != null &&
@@ -69,242 +78,181 @@ export default async function askCommand({ jid, args, state, candidates }) {
     talk.closed = false;
     talk.history = [];
     talk.usedClues = [];
+    talk.recapAwaitingAsk = false;
   }
 
-  // If a recap is pending for this visit, deliver it on the first ask
+  // NPC media pools
+  const scripted = Array.isArray(npc?.ai?.scriptedAnswers)
+    ? npc.ai.scriptedAnswers
+    : [];
+  const fallback = Array.isArray(npc?.ai?.fallbackAnswers)
+    ? npc.ai.fallbackAnswers
+    : [];
+
+  // Mandatory recap on first ask after exit, once per visit
   if (talk.recapAwaitingAsk && (talk.asked || 0) === 0) {
-    const realClue = (npc?.ai?.clues || []).find(
-      (c) => c && String(c.type).toLowerCase() === "real"
-    );
-    const line = realClue?.text || "I already told you what I heard.";
-    const formattedRecap = `"_${line}_"`;
-    await sendText(jid, formattedRecap);
-
-    const newHist = (talk.history || []).concat([
-      { q, a: line, ts: Date.now() },
-    ]);
-    while (newHist.length > 10) newHist.shift();
-
-    const newUsed = Array.isArray(talk.usedClues) ? talk.usedClues.slice() : [];
-    if (line && !newUsed.includes(line)) newUsed.push(line);
+    const forced = pickByType(fallback, "forcedClue");
+    const clip = forced?.entry;
+    if (clip?.videoUrl) {
+      await sendVideo(jid, clip.videoUrl);
+    } else if (clip?.script) {
+      await sendText(jid, clip.script);
+    } else {
+      await sendText(jid, "I already told you what I heard.");
+    }
 
     state.npcTalk[activeNpcId] = {
       asked: 1,
       revealed: true,
-      closed: true, // recap once per visit, then stonewall
-      history: newHist,
+      closed: true,
+      history: (talk.history || [])
+        .concat([
+          {
+            q,
+            aIndex: forced?.index || -1,
+            aTag: "forcedClue",
+            ts: Date.now(),
+          },
+        ])
+        .slice(-20),
       lastTalkChapter: chapter,
-      usedClues: newUsed,
+      usedClues: talk.usedClues,
       recapAwaitingAsk: false,
+      recapAvailable: true,
     };
     return;
   }
 
-  // If already closed for this chapter
+  // Already closed for this chapter/visit
   if (talk.asked >= cap || talk.closed) {
-    await sendText(jid, "I have nothing more to say about this.");
+    const stone = pickByType(fallback, "stonewall");
+    const sclip = stone?.entry;
+    if (sclip?.videoUrl) {
+      await sendVideo(jid, sclip.videoUrl);
+    } else if (sclip?.script) {
+      await sendText(jid, sclip.script);
+    } else {
+      await sendText(jid, "I have nothing more to say about this.");
+    }
+    state.npcTalk[activeNpcId] = {
+      ...state.npcTalk[activeNpcId],
+      asked: talk.asked + 1,
+      closed: true,
+      lastTalkChapter: chapter,
+      history: (talk.history || [])
+        .concat([
+          { q, aIndex: stone?.index || -1, aTag: "stonewall", ts: Date.now() },
+        ])
+        .slice(-20),
+    };
     return;
   }
 
-  const ai = npc.ai || {};
-  const style = ai.style || "";
-  const persona = ai.persona || "";
-  const openingBehavior = ai.openingBehavior || "";
-  const voiceHints = Array.isArray(ai.voiceHints) ? ai.voiceHints : [];
-  const clues = Array.isArray(ai.clues) ? ai.clues : [];
-  const banterPool = Array.isArray(ai.banterPool) ? ai.banterPool : [];
-  const voiceHintsParaphrase = !!ai.voiceHintsParaphrase;
-
-  const display = npc.displayName || npc.name || activeNpcId;
-  const desc = npc?.profile?.description || "";
-  const firstTurn = talk.asked === 0;
-
   const askedSoFar = talk.asked || 0;
 
-  // Decide clue for this turn
-  let clueForThisTurn = null;
-
-  // If real clue already revealed this visit, no more clues
-  const realClueRevealed = talk.revealed;
-
-  if (!realClueRevealed) {
-    if (askedSoFar >= cap - 1) {
-      // Last allowed question → prepare to force real if not yet revealed
-      const pickReal = clues.find(
-        (c) => c && String(c.type).toLowerCase() === "real"
-      );
-      clueForThisTurn = pickReal || null;
-    } else if (askedSoFar === 1 || askedSoFar === 3) {
-      // Q2 and Q4: herrings only
-      const nextHerr = clues.find(
-        (c) =>
-          c &&
-          String(c.type).toLowerCase() !== "real" &&
-          !talk.usedClues.includes(c.text)
-      );
-      clueForThisTurn = nextHerr || null;
+  // Force the real clue on the last allowed turn if not yet revealed
+  if (askedSoFar >= cap - 1 && !talk.revealed) {
+    // Prefer scripted clue if present, else forced fallback
+    const cluePick =
+      pickByType(scripted, "clue") || pickByType(fallback, "forcedClue");
+    const clip = cluePick?.entry;
+    if (clip?.videoUrl) {
+      await sendVideo(jid, clip.videoUrl);
+    } else if (clip?.script) {
+      await sendText(jid, clip.script);
     } else {
-      // Q1 and Q3: no clue injection, let LLM do vague/banter
-      clueForThisTurn = null;
+      await sendText(
+        jid,
+        "I heard two men fighting; one ran off in a white coat. That's all I know."
+      );
     }
-  } else {
-    // after reveal, no further clues this visit
-    clueForThisTurn = null;
-  }
-
-  // Hard guarantee: on the last allowed question, if the real clue hasn't been revealed yet,
-  // deliver it directly without going through the model.
-  if (
-    clueForThisTurn &&
-    String(clueForThisTurn.type).toLowerCase() === "real" &&
-    askedSoFar >= cap - 1 &&
-    !talk.revealed
-  ) {
-    const line = clueForThisTurn.text;
-    await sendText(jid, line);
-
-    // Update history and state, then return
-    const out = line;
-    const newHist = (talk.history || []).concat([
-      { q, a: out, ts: Date.now() },
-    ]);
-    while (newHist.length > 10) newHist.shift();
-
-    const newUsed = talk.usedClues ? talk.usedClues.slice() : [];
-    if (line && !newUsed.includes(line)) newUsed.push(line);
 
     state.npcTalk[activeNpcId] = {
       asked: askedSoFar + 1,
       revealed: true,
       closed: true,
-      history: newHist,
+      history: (talk.history || [])
+        .concat([
+          { q, aIndex: cluePick?.index || -1, aTag: "clue", ts: Date.now() },
+        ])
+        .slice(-20),
       lastTalkChapter: chapter,
-      usedClues: newUsed,
+      usedClues: talk.usedClues,
+      recapAwaitingAsk: false,
+      recapAvailable: true,
     };
     return;
   }
 
-  // Build compact prompt with recent history and optional clue
-  const recent = (talk.history || []).slice(-4);
-  const historyStr = recent.length
-    ? "Recent exchanges:\n" +
-      recent.map((h) => `- Q: ${h.q}\n  A: ${h.a}`).join("\n")
-    : "";
+  // Classifier path for pre-cap turns
+  const map = scripted.reduce((acc, entry, i) => {
+    const idx = i + 1;
+    const tag = String(entry?.type || "vague").toLowerCase();
+    acc[idx] = tag;
+    return acc;
+  }, {});
 
-  const lastAnswers = recent
-    .slice(-2)
-    .map((h) => h.a)
-    .filter(Boolean);
-  const avoidLine = lastAnswers.length
-    ? `Avoid repeating earlier phrasing; do not restate these lines verbatim: ${lastAnswers
-        .map((s) => '"' + s.slice(0, 140) + '"')
-        .join(" ")}`
-    : "";
+  const lastTypes = (talk.history || [])
+    .map((h) => h.aTag)
+    .filter(Boolean)
+    .slice(-1);
 
-  const banter =
-    !clueForThisTurn && banterPool.length
-      ? banterPool[Math.floor(Math.random() * banterPool.length)]
-      : "";
-  const banterLine = banter
-    ? `Optional color detail (do not add facts): "${banter}"`
-    : "";
+  const allowClue = askedSoFar >= cap - 1 || !!talk.revealed; // never before last turn if not revealed
 
-  const personaLine = persona ? `Persona: ${persona}` : "";
-  const voiceLine = voiceHints.length
-    ? `Voice hints: ${voiceHints.map((v) => `- ${v}`).join(" ")}`
-    : "";
-
-  const generic = getGenericAIPrompt(chapter).trim();
-  const opening = firstTurn && openingBehavior ? openingBehavior : "";
-  const clueLine = clueForThisTurn?.text
-    ? `Clue to phrase (use this content, do not add facts): "${clueForThisTurn.text}"`
-    : "";
-
-  // Add line if real clue was already revealed
-  const revealedWarningLine = realClueRevealed
-    ? "You have already revealed your main clue; do not repeat it. You may only banter or deflect."
-    : "";
-
-  // If clue is repeated (already used), instruct to paraphrase or deflect
-  let clueRepeatWarning = "";
-  if (
-    clueForThisTurn &&
-    clueForThisTurn.text &&
-    talk.usedClues.includes(clueForThisTurn.text) &&
-    !realClueRevealed
-  ) {
-    clueRepeatWarning =
-      "If repeating a clue, paraphrase it differently or deflect instead of repeating verbatim.";
+  let cls;
+  try {
+    cls = await classifyNpcReply({
+      question: q,
+      npc: { id: activeNpcId, tone: npc?.ai?.persona || "" },
+      map,
+      context: { asked: askedSoFar, lastTypes },
+      policy: { allowClue, avoidRepeatTypes: true, insultDetection: true },
+    });
+  } catch {
+    cls = null;
   }
 
-  const instruction = [
-    `You are ${display}.`,
-    desc,
-    personaLine,
-    `Style: ${style || "brief, realistic"}.`,
-    `Chapter: ${chapter}.`,
-    opening,
-    generic,
-    voiceHintsParaphrase
-      ? "Paraphrase any repeated facts with different wording; avoid exact repetition."
-      : "",
-    revealedWarningLine,
-    clueRepeatWarning,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Safety: remap clue if classifier proposed it too early
+  if (!allowClue && cls && String(cls.tag).toLowerCase() === "clue") {
+    // pick first non-clue
+    const altPair = Object.entries(map).find(
+      ([i, t]) => String(t).toLowerCase() !== "clue"
+    );
+    if (altPair) cls = { index: Number(altPair[0]), tag: altPair[1] };
+  }
 
-  const prompt = [
-    instruction,
-    voiceLine,
-    historyStr,
-    clueLine,
-    banterLine,
-    avoidLine,
-    `User question: ${q}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Resolve selected scripted clip
+  const chosenIndex = cls?.index && scripted[cls.index - 1] ? cls.index : 1;
+  const chosen = scripted[chosenIndex - 1] || null;
 
-  // If real clue already revealed and askedSoFar < cap, bias responses toward banter or vague deflections
-  let reply;
-  if (realClueRevealed && askedSoFar < cap) {
-    // Bias temperature higher for more varied banter or vague deflections, and limit tokens
-    reply = await askOpenAI(prompt, { max_tokens: 100, temperature: 0.8 });
+  if (chosen?.videoUrl) {
+    await sendVideo(jid, chosen.videoUrl);
+  } else if (chosen?.script) {
+    await sendText(jid, chosen.script);
   } else {
-    reply = await askOpenAI(prompt, { max_tokens: 120, temperature: 0.6 });
+    await sendText(jid, "…");
   }
-  const out = reply || "…";
-  const formatted = `"_${out}_"`;
 
-  await sendText(jid, formatted);
-
-  // Update state: asked, revealed, closed, history, chapter
-  const revealedNow = talk.revealed; // only set to true in the short-circuit branch above or via recap
-
-  const newHist = (talk.history || []).concat([{ q, a: out, ts: Date.now() }]);
-  while (newHist.length > 10) newHist.shift();
-
-  const newUsed = talk.usedClues ? talk.usedClues.slice() : [];
-  if (
-    clueForThisTurn &&
-    clueForThisTurn.text &&
-    !newUsed.includes(clueForThisTurn.text)
-  ) {
-    newUsed.push(clueForThisTurn.text);
-  }
+  // Update state
+  const newHist = (talk.history || [])
+    .concat([
+      {
+        q,
+        aIndex: chosenIndex,
+        aTag: String(chosen?.type || "vague").toLowerCase(),
+        ts: Date.now(),
+      },
+    ])
+    .slice(-20);
 
   state.npcTalk[activeNpcId] = {
     asked: askedSoFar + 1,
-    revealed: revealedNow,
-    closed: askedSoFar + 1 >= cap,
+    revealed: talk.revealed,
+    closed: askedSoFar + 1 >= cap ? true : false,
     history: newHist,
     lastTalkChapter: chapter,
-    usedClues: newUsed,
+    usedClues: talk.usedClues,
+    recapAwaitingAsk: false,
+    recapAvailable: talk.revealed ? true : talk.recapAvailable,
   };
-
-  if (askedSoFar + 1 >= cap && !revealedNow) {
-    // If somehow not revealed by cap, ensure next call closes immediately
-    state.npcTalk[activeNpcId].closed = true;
-  }
 }

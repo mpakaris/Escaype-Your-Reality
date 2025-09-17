@@ -135,6 +135,8 @@ export async function run({ jid, user, game, state, args, candidates }) {
         history: [],
         lastTalkChapter: null,
         recapAvailable: false,
+        recapAwaitingAsk: false,
+        usedClues: [],
       };
     }
 
@@ -169,6 +171,8 @@ export async function run({ jid, user, game, state, args, candidates }) {
       history: [],
       lastTalkChapter: null,
       recapAvailable: false,
+      recapAwaitingAsk: false,
+      usedClues: [],
     };
   }
 
@@ -179,7 +183,11 @@ export async function run({ jid, user, game, state, args, candidates }) {
     }
   }
 
-  const profileImg = target?.profile?.image || null;
+  const profileImg =
+    (target?.profile?.images &&
+      (target.profile.images.headshot || target.profile.images.fullBody)) ||
+    target?.profile?.image ||
+    null;
   const profileDesc = target?.profile?.description || null;
   if (profileImg) {
     try {

@@ -67,6 +67,8 @@ export async function sendVideo(jid, url) {
     console.log(`DEV mode: blocked send to ${jid}`);
     return;
   }
+  if (!base) throw new Error("WHINSELF_BASE_URL not set");
+  if (!jid || !url) throw new Error("jid and url required");
   try {
     await api.post("/wspout", { video: { url }, jid });
   } catch (err) {
