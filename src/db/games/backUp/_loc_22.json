@@ -1,0 +1,63 @@
+{
+      "id": "2,2",
+      "name": "City Bank",
+      "arrival": {
+        "text": "You enter the *City Bank*. Marble floors, hushed voices. A vault waits behind the counter.",
+        "images": ["https://i.postimg.cc/2jgF0S40/citybank.png"]
+      },
+      "structures": [
+        {
+          "id": "branch_floor",
+          "displayName": "City Bank",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                {
+                  "id": "deposit_box_42",
+                  "displayName": "Deposit Box #42",
+                  "tags": ["openable", "lockable"],
+                  "states": { "opened": false },
+                  "actions": ["use", "search"],
+                  "lock": {
+                    "type": "key",
+                    "locked": true,
+                    "requiredItem": "safe_key",
+                    "lockedHint": "It’s locked. A tiny brass keyhole stares back at you.",
+                    "autoOpenOnUnlock": true,
+                    "onUnlockMsg": "A soft click—Box #42 opens."
+                  },
+                  "contents": ["usb_drive", "draft_print", "restaurant_card"]
+                }
+              ],
+              "npcs": ["bank_manager_arthur"]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "This is an old-fashioned bank. It could use some renovations. I wonder how safe my money would be here." },
+            { "type": "narrator", "text": "You study counters and corners—tellers’ glances, keyholes, and the quiet places money hides." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Marble, hush, and the scent of ink and money.",
+      "neighborhood": "Financial District",
+      "weatherPool": [
+        "Rain needles the marble steps.",
+        "Fog drapes the columns.",
+        "Thunder rolls somewhere far."
+      ],
+      "activityPool": [
+        "Bo wipes water from his coat brim.",
+        "Bo clocks the guard’s posture.",
+        "Bo palms the key in his pocket."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/2jgF0S40/citybank.png",
+        "arrivalImageRain": "https://i.postimg.cc/2jgF0S40/citybank.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_BANK"
+      },
+      "enterHint": "This is a bank. Type */enter bank* to investigate the interior."
+    }

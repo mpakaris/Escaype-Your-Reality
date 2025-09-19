@@ -1,0 +1,26 @@
+{
+      "id": "2,1",
+      "name": "Alleyway",
+      "arrival": {
+        "text": "You slip into a narrow *Alleyway*. Wet crates, a flickering bulb, and nothing useful.",
+        "images": ["https://i.postimg.cc/h4Y7KZvv/alleyway.png"]
+      },
+      "structures": [],
+      "flavor": "Wet crates, a flickering bulb, and nothing useful.",
+      "neighborhood": "Back Alleys",
+      "weatherPool": [
+        "A cold drip echoes from the gutter.",
+        "Wind threads through fire escapes.",
+        "Rain whispers on trash lids."
+      ],
+      "activityPool": [
+        "Bo checks over his shoulder.",
+        "Bo steps around a dark puddle.",
+        "Bo listens for a second set of footsteps."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/h4Y7KZvv/alleyway.png",
+        "arrivalImageRain": "https://i.postimg.cc/h4Y7KZvv/alleyway.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_ALLEY"
+      }
+    }

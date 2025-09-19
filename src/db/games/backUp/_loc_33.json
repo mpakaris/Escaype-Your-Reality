@@ -1,0 +1,26 @@
+{
+      "id": "3,3",
+      "name": "Bus Stop",
+      "arrival": {
+        "text": "You are at the _*Bus Stop*_ Intersection.\n\nA drunk mutters conspiracy theories. Rain doesn’t care.",
+        "images": ["https://i.postimg.cc/7Lq5Kpss/busstop.png"]
+      },
+      "structures": [],
+      "flavor": "A drunk mutters conspiracy theories. Rain doesn’t care.",
+      "neighborhood": "Transit Edge",
+      "weatherPool": [
+        "Rain beads on the schedule plate.",
+        "Fog swallows the next stop.",
+        "Wind tugs the route map loose."
+      ],
+      "activityPool": [
+        "Bo checks the time.",
+        "Bo watches a bus hiss past.",
+        "Bo adjusts his collar against the wind."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/7Lq5Kpss/busstop.png",
+        "arrivalImageRain": "https://i.postimg.cc/7Lq5Kpss/busstop.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_TRANSIT"
+      }
+    }

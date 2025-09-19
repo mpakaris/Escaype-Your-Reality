@@ -44,15 +44,6 @@ build/
 *.swp
 *.swo
 
-# DB and local state
-# Ignore by default, but track JSONL data files
-src/db/users/*
-src/db/games/*
-!src/db/users/.gitkeep
-!src/db/games/.gitkeep
-!src/db/users/**/*.jsonl
-!src/db/games/**/*.jsonl
-
 # Docker
 *.pid
 docker-compose.override.yml

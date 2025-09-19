@@ -1,0 +1,65 @@
+{
+  "gameId": "1000",
+  "id": "1,1",
+  "name": "Apartment Complex",
+  "arrival": {
+    "text": "You stand in front of an ordinary _*Apartment Complex*_.\n\nIt seems, that the Journalist lived here.\n\nRain taps the cracked window. The neighbor across the hall watches you. (Try searching the desk and coat.)",
+    "images": [
+      "https://i.postimg.cc/VNMcb6B2/journalistapartment.png"
+    ]
+  },
+  "structures": [
+    {
+      "id": "apartment_unit",
+      "displayName": "Journalist’s Apartment",
+      "enterable": true,
+      "toEnter": [],
+      "rooms": [
+        {
+          "id": "main",
+          "objects": [
+            "desk",
+            "bookshelf",
+            "coat"
+          ],
+          "npcs": [
+            "neighbor_mrs_kline"
+          ]
+        }
+      ],
+      "onEnter": [
+        {
+          "type": "narrator",
+          "text": "The apartment is cramped and stale. Dust glitters in the lamplight."
+        },
+        {
+          "type": "narrator",
+          "text": "You slow your breath and trace the scene—dust motes, scuff marks, anything out of place."
+        }
+      ],
+      "onEnterList": [
+        "objects",
+        "npcs",
+        "items"
+      ]
+    }
+  ],
+  "flavor": "Rain taps the cracked window. Someone left in a hurry.",
+  "neighborhood": "Residential Row",
+  "weatherPool": [
+    "Rain ticks on the sill.",
+    "Fog presses close to the brick.",
+    "Damp air clings to the hallway."
+  ],
+  "activityPool": [
+    "Bo rubs the sleep from his eyes.",
+    "Bo listens—stairs creak somewhere above.",
+    "Bo flicks ash into an old tray."
+  ],
+  "media": {
+    "arrivalImage": "https://i.postimg.cc/VNMcb6B2/journalistapartment.png",
+    "arrivalImageRain": "https://i.postimg.cc/VNMcb6B2/journalistapartment.png",
+    "arrivalAudio": "AUDIO_URL_AMBIENT_RESIDENTIAL"
+  },
+  "enterHint": "This is the victim's apartment.\n\nType */enter apartment* to investigate the interior."
+}

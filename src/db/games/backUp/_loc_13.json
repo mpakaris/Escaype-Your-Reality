@@ -1,0 +1,79 @@
+{
+  "id": "1,3",
+  "name": "La Belle Cuisine",
+  "arrival": {
+    "text": "You stand outside *La Belle Cuisine*. Polished cutlery, nervous staff. The smell of citrus and fear.",
+    "images": ["https://i.postimg.cc/63fJYmP0/labellecuisine.png"]
+  },
+  "structures": [
+    {
+      "id": "dining_hall",
+      "displayName": "La Belle Cuisine",
+      "enterable": true,
+      "toEnter": [],
+      "rooms": [
+        {
+          "id": "main",
+          "objects": [
+            {
+              "id": "prep_table",
+              "displayName": "Prep Table",
+              "tags": ["searchable"],
+              "states": {},
+              "actions": ["search"],
+              "contents": ["cast_iron_skillet"]
+            },
+            {
+              "id": "filing_cabinet",
+              "displayName": "Filing Cabinet",
+              "tags": ["openable", "lockable"],
+              "states": { "opened": false },
+              "actions": ["look", "search", "use", "open"],
+              "lock": {
+                "type": "key",
+                "locked": true,
+                "requiredItem": "editor_note",
+                "lockedHint": "The drawer won’t give without proper authorization.",
+                "onUnlockMsg": "A quiet click—drawers slide open.",
+                "autoOpenOnUnlock": false
+              },
+              "contents": ["supply_order", "rooftop_code"]
+            },
+            {
+              "id": "locker",
+              "displayName": "Locker",
+              "tags": ["searchable"],
+              "states": {},
+              "actions": ["search"],
+              "contents": []
+            }
+          ],
+          "npcs": ["hostess_lena", "chef_marco"]
+        }
+      ],
+      "onEnter": [
+        { "type": "narrator", "text": "Front of house hums; behind the door, the kitchen clatters." },
+        { "type": "narrator", "text": "You read the room—anxious eyes, hurried whispers, crumbs of truth under all that polish." }
+      ],
+      "onEnterList": ["objects", "npcs", "items"]
+    }
+  ],
+  "flavor": "Polished cutlery, nervous staff. The smell of citrus and fear.",
+  "neighborhood": "Restaurant Row",
+  "weatherPool": [
+    "Rain slicks the awning.",
+    "Steam fogs the front glass.",
+    "Wind rattles the menu frame."
+  ],
+  "activityPool": [
+    "Bo straightens his tie—barely.",
+    "Bo notes the hurried bussers.",
+    "Bo lingers by the doorway, watching."
+  ],
+  "media": {
+    "arrivalImage": "https://i.postimg.cc/63fJYmP0/labellecuisine.png",
+    "arrivalImageRain": "https://i.postimg.cc/63fJYmP0/labellecuisine.png",
+    "arrivalAudio": "AUDIO_URL_AMBIENT_RESTAURANT_EXTERIOR"
+  },
+  "enterHint": "This is a restaurant. Type */enter restaurant* to investigate the interior."
+}

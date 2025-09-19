@@ -1,0 +1,30 @@
+
+
+{
+  "id": "1,2",
+  "name": "Castle End Park",
+  "arrival": {
+    "text": "You are now at *Castle End Park*. A quiet patch of green in the heart of Bloodhaven — a place where lovers stroll, families linger, and nature nerds count pigeons. But tonight, the laughter is gone. Only an empty park bench and an old man tossing breadcrumbs into the shadows remain… and even the pigeons seem uneasy.",
+    "images": [
+      "https://i.postimg.cc/j231104z/parkbench.png"
+    ]
+  },
+  "structures": [],
+  "flavor": "A quiet patch of green gone hushed; only an old man and uneasy pigeons.",
+  "neighborhood": "City Park Edge",
+  "weatherPool": [
+    "A fine drizzle beads on the bench.",
+    "Wind combs the treetops.",
+    "Mist halos the lamps."
+  ],
+  "activityPool": [
+    "Bo stretches his back.",
+    "Bo watches pigeons scatter.",
+    "Bo scans faces passing by."
+  ],
+  "media": {
+    "arrivalImage": "https://i.postimg.cc/j231104z/parkbench.png",
+    "arrivalImageRain": "https://i.postimg.cc/j231104z/parkbench.png",
+    "arrivalAudio": "AUDIO_URL_AMBIENT_PARK"
+  }
+}

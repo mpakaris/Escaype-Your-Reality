@@ -1,0 +1,52 @@
+{
+      "id": "3,2",
+      "name": "Daily Ledger (Media House)",
+      "arrival": {
+        "text": "You arrive at the *Daily Ledger*. Phones ring, typewriter clacks, deadlines breathe down necks.",
+        "images": ["https://i.postimg.cc/Lss1Hctq/dailyledger.png"]
+      },
+      "structures": [
+        {
+          "id": "news_floor",
+          "displayName": "Daily Ledger Offices",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                { "id": "janitor_closet", "displayName": "Janitor's Closet", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["broom_handle"] },
+                { "id": "inbox_tray", "displayName": "Inbox Tray", "tags": ["searchable"], "states": {}, "actions": ["look","search"], "contents": ["chef_complaint_email","editor_note"] }
+              ],
+              "npcs": [
+                "receptionist_sophie",
+                { "id": "editor_mr_hale", "visibleWhen": ["flag:sophie_bank_hint"] }
+              ]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "Reception is a sea of ringing phones. Offices wait beyond." },
+            { "type": "narrator", "text": "You clock badges, inbox trays, and who avoids your gaze." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Phones ring, typewriter clacks, deadlines breathe down necks.",
+      "neighborhood": "Press District",
+      "weatherPool": [
+        "Rain streaks the newsroom windows.",
+        "Fog turns streetlights to halos.",
+        "Thunder rattles the frames."
+      ],
+      "activityPool": [
+        "Bo watches couriers sprint in.",
+        "Bo flips his notebook closed.",
+        "Bo notes the editor’s door—shut."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/Lss1Hctq/dailyledger.png",
+        "arrivalImageRain": "https://i.postimg.cc/Lss1Hctq/dailyledger.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_NEWSROOM"
+      },
+      "enterHint": "This is the media house. Type */enter ledger* to investigate the interior."
+    }

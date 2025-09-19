@@ -1,0 +1,74 @@
+{
+      "id": "3,1",
+      "name": "Rooftop Access",
+      "arrival": {
+        "text": "You reach the *Rooftop Access*. Wind howls over puddles. A keypad guards a steel door.",
+        "images": ["https://i.postimg.cc/zX36gvqp/rooftopaccess.png"]
+      },
+      "structures": [
+        {
+          "id": "staircore",
+          "displayName": "Rooftop Stairwell",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                {
+                  "id": "keypad",
+                  "displayName": "Keypad",
+                  "tags": ["openable","lockable"],
+                  "actions": ["use","open"],
+                  "states": { "opened": false },
+                  "lock": {
+                    "type": "code",
+                    "locked": true,
+                    "requiredItem": "rooftop_code",
+                    "lockedHint": "Red light. Wrong code or no authorization.",
+                    "autoOpenOnUnlock": false,
+                    "onUnlockMsg": "Green light. The stair door releases.",
+                    "onUnlockFlag": "rooftop_open"
+                  },
+                  "contents": []
+                },
+                { "id": "vent_stack", "displayName": "Vent Stack", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["metal_pipe_weapon"] },
+                {
+                  "id": "rooftop",
+                  "displayName": "Rooftop",
+                  "tags": ["searchable"],
+                  "states": {},
+                  "actions": ["search"],
+                  "visibleWhen": ["flag:rooftop_open"],
+                  "contents": ["bloody_knife"]
+                }
+              ],
+              "npcs": []
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "Concrete steps spiral upward. Damp air, a locked door above." },
+            { "type": "narrator", "text": "You run a gloved hand along the rail; footprints, smears, and scratches tell their own story." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Wind howls over puddles. City lights burn below.",
+      "neighborhood": "Industrial Rooftops",
+      "weatherPool": [
+        "Wind howls through the stairwell.",
+        "Rain pecks at the metal door.",
+        "Fog curls along the rails."
+      ],
+      "activityPool": [
+        "Bo cups a hand to shield a match.",
+        "Bo counts steps between landings.",
+        "Bo listens; the city breathes below."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/zX36gvqp/rooftopaccess.png",
+        "arrivalImageRain": "https://i.postimg.cc/zX36gvqp/rooftopaccess.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_ROOFTOP"
+      },
+      "enterHint": "This is a stairwell to the roof. Type */enter stairwell* to investigate the interior."
+    }

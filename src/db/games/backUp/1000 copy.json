@@ -1,0 +1,965 @@
+{
+  "uuid": "2025_001",
+  "gameUUID": "1000",
+  "schemaVersion": "1.0",
+  "version": "0.1",
+  "engine": {
+    "containers": {
+      "hideTakenFromContainers": true,
+      "roomDropsStayVisible": true
+    },
+    "items": {
+      "defaultUnique": true
+    }
+  },
+  "title": "Blood on the Rooftop",
+  "media": {
+    "images": {
+      "welcome": "https://i.postimg.cc/qqXtktrk/welcome.png",
+      "bo": "https://i.postimg.cc/CKzfjLGN/Bo.png",
+      "map": "https://i.postimg.cc/wvfRVTGG/Screenshot-2025-08-12-at-13-43-08.png",
+      "angry": "https://i.postimg.cc/vBngNqSx/angry.png",
+      "busted": "https://i.postimg.cc/s2qGKdKR/busted.png",
+      "key": "https://i.postimg.cc/xTnJ6PGq/key.png",
+      "smirk": "https://i.postimg.cc/0jqMRYLW/smirk.png",
+      "waitress": "https://i.postimg.cc/TY0yFWQ0/waitress.png",
+      "telefone": "https://i.postimg.cc/LXkfz7jD/telefone.png",
+      "widow": "https://i.postimg.cc/ZnxRRB1K/widow.png",
+      "victim": "https://i.postimg.cc/tRhD5v9L/victim.png",
+      "boInChair": "https://i.postimg.cc/xTQN2YW1/bo-In-Chair.png",
+      "onExit": "https://i.postimg.cc/Qt50LjB3/onExit.png"
+      ,"tutorial_placeholder": "https://community.softr.io/uploads/db9110/original/2X/7/74e6e7e382d0ff5d7773ca9a87e6f6f8817a68a6.jpeg"
+    },
+    "audio": {
+      "call_from_clara": "AUDIO_URL_1",
+      "bo_intro_sigh": "AUDIO_URL_2",
+      "wife_escape_alert": "AUDIO_URL_3",
+      "intro_msg_1": "https://res.cloudinary.com/dg912bwcc/video/upload/v1755438837/Intro_msg_1_xwj1bs.mp3",
+      "intro_msg_2": "https://res.cloudinary.com/dg912bwcc/video/upload/v1755452599/Intro_msg_2_qc5ycf.mp3"
+    },
+    "video": {
+      "sample_intro": "https://res.cloudinary.com/dg912bwcc/video/upload/v1755439027/SampleVideo_mwbviv.mp4"
+    },
+    "document": {
+      "test_txt": "https://res.cloudinary.com/dg912bwcc/raw/upload/v1755439105/test_dzzwjt.txt",
+      "test_pdf": "PDF_URL_TBD"
+    },
+    "onExitBo": {
+      "type": "image",
+      "id": "onExit"
+    } 
+  },
+  "sequences": {
+    "intro": [
+      {
+        "id": "1",
+        "header": "Case: _*Blood on the Rooftop*_",
+        "steps": [
+          { "type": "narrator", "text": "*Welcome to Bloodhaven.* 🌧️🌃\n\nThey say the rain never stops here.\nBut tonight, something darker than clouds is hanging over the city... 🕵️‍♂️" },
+          { "type": "narrator", "text": "*A MURDER HAS BEEN COMMITTED!* 🩸🔪" },
+          { "type": "image", "id": "bo" },
+          { "type": "narrator", "text": "_*Detective Bo Derrick's*_ night is about to take an ugly turn." },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to find out more." }
+        ]
+      },
+      {
+        "id": "2",
+        "header": "*The Victim*",
+        "steps": [
+          { "type": "narrator", "text": "A known and loved journalist — *Gavin Montrose*. 📰💔" },
+          { "type": "image", "id": "victim" },
+          { "type": "narrator", "text": "Brutally murdered on the rooftop of his house.\n\nWho would harm an innocent soul like Gavin?" },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to find out more." }
+        ]
+      },
+      {
+        "id": "3",
+        "header": "*Red Light*",
+        "steps": [
+          { "type": "narrator", "text": "*Bo's phone on his old wooden desk blinks red.*\n\nA herald of bad mojo.\n\nAn urgent message ready to unleash a storm.\n\nThe tension is palpable. 📱\n\nA cold current runs through Detective Bo Derrick, nerves humming." },
+          { "type": "image", "id": "telefone" },
+          { "type": "narrator", "text": "He pushes the button and steels himself for the worst. \n\nA female voice starts talking. \n\n_*Why does she sound so familiar?*_" },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to find out more." }
+        ]
+      },
+      {
+        "id": "4",
+        "header": "*The Widow*",
+        "steps": [
+          { "type": "image", "id": "widow" },
+          { "type": "audio", "id": "intro_msg_1" },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to continue." }
+        ]
+      },
+      {
+        "id": "5",
+        "header": "*Detective Bo's Conflict*",
+        "steps": [
+          { "type": "narrator", "text": "Jack died. 💀\n\nA tragic, unnecessary death.\n\nA new widow left in shock." },
+          { "type": "image", "id": "boInChair" },
+          { "type": "narrator", "text": "Bo Derrick observes the rain rolling slowly off the smudged windows.\n\nI could really use a drink right now, he thinks." },
+          { "type": "audio", "id": "intro_msg_2" },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to move on." }
+        ]
+      },
+      {
+        "id": "6",
+        "header": "*Your Mission*",
+        "steps": [
+          { "type": "narrator", "text": "Follow the trail that Gavin left behind — scraps of paper, whispers in back rooms, a door no one wants opened.\n\nUnmask who lured him to the roof — and why.\n\n_*But be warned:*_\nEvery step you take will make someone nervous." },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to move on." }
+        ]
+      },
+      {
+        "id": "7",
+        "header": "*Are You ready for this case?*",
+        "steps": [
+          { "type": "narrator", "text": "To investigate the death of Gavin, leave the office and navigate your way through the city.\n\n*Good luck—you'll need it.*" },
+          { "type": "narrator", "text": "_Continue_:\nType */next* to find out how to move around in Bloodhaven." }
+        ]
+      },
+      {
+        "id": "8",
+        "header": "*The Grid and its Locations*",
+        "steps": [
+          { "type": "image", "id": "map" },
+          { "type": "narrator", "text": "*Bloodhaven* is a 3x3 grid of places.\n\n3 vertical streets and 3 horizontal streets.\n\nUse _*/move*_ to jump between locations (e.g., */move 11*)." },
+          { "type": "narrator", "text": "At each location, you might find buildings.\n\nUse _*/enter*_ to step inside." },
+          { "type": "narrator", "text": "Try _*/map*_ anytime to see all of Bloodhaven." },
+          { "type": "narrator", "text": "Try _*/where-am-i*_ anytime to see where you are and what’s here." }
+        ]
+      },
+      {
+        "id": "9",
+        "header": "*Structures*",
+        "steps": [
+          { "type": "image", "id": "tutorial_placeholder" },
+          { "type": "narrator", "text": "Inside buildings, use */look* to see list of people and objects in the room." },
+          { "type": "narrator", "text": "Use */exit* to leave the building and return to the location." },
+          { "type": "narrator", "text": "Talk to NPCs with */talk name* (e.g., */talk neighbor*)." }
+        ]
+      },
+      {
+        "id": "10",
+        "header": "*Objects*",
+        "steps": [
+          { "type": "image", "id": "tutorial_placeholder" },
+          { "type": "narrator", "text": "Objects can hide useful items.\n\nUse */search <object>* or */check <object>* to see what they’re hiding." },
+          { "type": "narrator", "text": "Examples:\n\n• */open desk*\n• */check cabinet*" }
+        ]
+      },
+      {
+        "id": "11",
+        "header": "*Items* 🗝️",
+        "steps": [
+          { "type": "image", "id": "tutorial_placeholder" },
+          { "type": "narrator", "text": "Help you to solve the case. Items help open doors, find clues or to gather evidence." },
+          { "type": "narrator", "text": "Use\n-*/take* to pick items up,\n-*/drop* to discard,\n-*/use* to interact,\n-and */read* to inspect notes." },
+          { "type": "narrator", "text": "Use */inventory* to see what you carry with you." },
+          { "type": "narrator", "text": "Type */exit* to complete the intro and begin your journey." }
+        ]
+      }
+    ],
+    "tutorial": [
+      {
+        "id": "t1",
+        "header": "*Tutorial — Basics*",
+        "steps": [
+          { "type": "narrator", "text": "This is a quick primer on movement and exploration." },
+          { "type": "narrator", "text": "Use */map* to view the 3x3 grid. You start at the *Office*." },
+          { "type": "narrator", "text": "Move with */move rc* — e.g., */move 11* to go to row 1, col 1." },
+          { "type": "narrator", "text": "Enter buildings with */enter <name>* and leave with */exit*." },
+          { "type": "narrator", "text": "Inside, try */look* to list *Objects*, *People*, and loose *Items*." }
+        ]
+      },
+      {
+        "id": "t2",
+        "header": "*Tutorial — Interactions*",
+        "steps": [
+          { "type": "narrator", "text": "Search objects with */search <object>* (or */check*)." },
+          { "type": "narrator", "text": "Take items with */take <item>* and inspect notes with */read <item>*." },
+          { "type": "narrator", "text": "Use items with */use <item>* when an object is locked or needs something." },
+          { "type": "narrator", "text": "Talk to people with */talk <name>* to advance leads or unlock access." }
+        ]
+      }
+    ]
+  },
+
+  "onPurchase": {
+    "success": "✅ Purchase successful!\n\nThank you for trusting a Game of _*Run From Reality*_."
+  },
+
+  "progression": {
+    "chapters": {
+      "1": {
+        "requires": {
+          "location": "1,1",
+          "inStructure": true,
+          "items": ["restaurant_receipt"],
+          "talkedTo": ["neighbor_mrs_kline"]
+        },
+        "summaryTpl": "Chapter 1 complete.\n\nRain slackens and the city listens. You’ve cracked the first layer: a neighbor’s hint and a grease-stamped lie point to *La Belle Cuisine*. Revisit familiar corners—success rattles cages, and tongues get looser.\n\nYour move, Detective."
+      },
+      "2": {
+        "requires": {
+          "items": ["usb_drive", "draft_print"],
+          "flags": ["visited_structure_id:branch_floor", "got_editor_note"]
+        },
+        "summaryTpl": "Chapter 2 complete.\n\nMoney leaves a paper trail and you followed it. Box 42 yielded a USB and a marked-up draft; the editor slipped you the chef’s schedule. Kitchens hide heat and secrets—time to stir them."
+      },
+      "3": {
+        "requires": {
+          "items": ["supply_order"],
+          "flags": ["visited_structure_id:dining_hall", "rooftop_open"]
+        },
+        "summaryTpl": "Chapter 3 complete.\n\nThe office files smell of grease and lies. A supply order for rooftop gear and a code that opens more than doors. The wind up there is waiting for you.\n\n*Tip:* The door is open now—check the rooftop again and search for any evidence the police may have missed."
+      },
+      "4": {
+        "requires": {
+          "items": ["metal_pipe_weapon"],
+          "flags": ["rooftop_open", "proofs_ready"]
+        },
+        "summaryTpl": "Chapter 4 complete.\n\nAccess granted, weapon found, proofs aligned. Marco’s story buckles under weight and weather. The city exhales—tonight, the truth is louder than the rain."
+      }
+    }
+  },
+
+  "special": {
+    "start": { "place": "office", "inStructure": true, "pendingChapterOnExit": 1 },
+    "office": {
+      "id": "office",
+      "name": "Detective's Office",
+      "onExit": [
+        { "type": "setChapter", "value": 1 }
+      ]
+    }
+  },
+
+  "ui": {
+    "templates": {
+      "arrival": "{location}: {flavor}",
+      "whereAmI": "You’re at *{location}*. {flavor}",
+      "whereOutside": "You’re at *{location}*. {flavor}\n\n*Around you:* {structures}",
+      "whereInside": "You’re inside *{structure}*. The street’s a memory behind you.",
+      "enterPrompt": "This is *{structure}*. Type */enter {command}* to step inside.",
+      "enterConfirmed": "You slip inside *{structure}*. The door hushes the city.",
+      "enterDenied": "You press the handle—*locked*. Something else will have to give.",
+      "alreadyInside": "You’re already inside. The street’s a memory behind you.",
+      "notInside": "You’re not inside a building.",
+      "exitToStreet": [
+        "You step back onto the street. {weather}",
+        "{mood}",
+        "{prompt}"
+      ],
+      "lookHeaderInside": "You scan the room for clues, suspicious behaviour and helpful hints.",
+      "lookObjectsLabel": "Objects:",
+      "lookNpcsLabel": "People:",
+      "lookItemsLabel": "Loose items:",
+      "searchFound": "You search the *{object}* and find: {items}.",
+      "searchEmpty": "You search the *{object}*—nothing but dust and old promises.",
+      "itemTaken": "You picked up *{item}*. {hint}",
+      "itemDropped": "You dropped *{item}*.",
+      "itemUseSuccess": "*Success:* {text}",
+      "itemUseFail": "*Darn it.* That didn’t work.",
+      "itemAlreadyHave": "You already carry *{item}*.",
+      "itemNotHere": "You don’t see *{item}* here.",
+      "readGeneric": "You read *{item}*:\n{content}",
+      "talkNoNpc": "No one by that name answers to you here.",
+      "talkOpen": "{name} looks your way. \"{line}\"",
+      "moveConfirm": "You head to *{location}*. {flavor}",
+      "moveInvalid": "Can’t move like that. Use */move r/c* (e.g., */move 12*).",
+      "mapHeader": "*Bloodhaven — City Map*",
+      "inventoryHeader": "*Inventory:*",
+      "inventoryEmpty": "Your pockets are empty and honest. For now.",
+      "gateBlocked": "Something stops you. *{reason}*",
+      "hintHeader": "*Hint:*",
+      "unknownCommandDuringIntro": "Finish the introduction first. Type */next* to continue or */reset* to restart.",
+      "unknownCommandGeneric": "I’m not sure what you mean. Try */help* or */info*.",
+      "help": "*How to play*\n\n• */map* — view the 3x3 grid\n• */where-am-i* — show your current location\n• */move rc* — go to row/col (e.g., */move 11*)\n• */enter <name>* — enter a building\n• */exit* — leave a building or finish intro at the end\n• */look* — list objects, people, and items in the room\n• */search <object>* — check an object\n• */talk <name>* — talk to an NPC\n• */take|/drop <item>* — manage inventory\n• */use <item>* — use an item (unlock, interact)\n• */read <item>* — read notes or papers\n• */inventory* — list what you carry\n\nIf an on-rails sequence is running, use */next* to continue.",
+      "info": "*Case Progress*\nChapter: *{chapterName}*\n\n*Active goals:*\n{activeGoals}\n\n*Flags:* {flags}",
+      "whereToNext": "Where to next, Detective?"
+    },
+    "streetExitMoodPool": [
+      "The rain keeps falling, needling your collar.",
+      "A chilly wind makes you tug the trench a little tighter.",
+      "For a heartbeat the clouds thin—then the city swallows the light again.",
+      "Street lamps buzz; puddles turn into murky mirrors.",
+      "Your legs feel the hours, but the case won’t solve itself."
+    ],
+    "streetExitPrompts": [
+      "Where to next, Detective?",
+      "What’s your next move, Derrick?",
+      "Your call—lead the way.",
+      "Point me, and we’ll walk.",
+      "Another corner, another secret. Where to?"
+    ],
+    "moveSameLocationRemarks": [
+      "Detective, pacing in circles won’t solve the case.",
+      "You’re already here. Unless you’ve mastered teleportation, nothing changes.",
+      "Standing still in the rain won’t conjure clues.",
+      "Groundhog minute. Try a different block.",
+      "Same corner, same ghosts. Pick another.",
+      "Boots stay dry, case stays cold. Move."
+    ],
+    "arrivalFallbackImage": "https://i.postimg.cc/CKzfjLGN/Bo.png",
+    "movementTutorial": {
+      "onFirstMove": "ℹ️ You are now at *{locationName}*. {flavor} The {mainStructureName} is here."
+    }
+  },
+  "grid": { "rows": 3, "cols": 3 },
+  "locations": [
+    {
+      "id": "1,1",
+      "name": "Apartment Complex",
+      "arrival": {
+        "text": "You stand in front of an ordinary _*Apartment Complex*_.\n\nIt seems, that the Journalist lived here.\n\nRain taps the cracked window. The neighbor across the hall watches you. (Try searching the desk and coat.)",
+        "images": ["https://i.postimg.cc/VNMcb6B2/journalistapartment.png"]
+      },
+      "structures": [
+        {
+          "id": "apartment_unit",
+          "displayName": "Journalist’s Apartment",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                { "id": "desk", "displayName": "Desk", "tags": ["searchable"], "states": { "opened": false }, "actions": ["look","search"], "contents": ["usb_hint_note","safe_key"] },
+                { "id": "bookshelf", "displayName": "Bookshelf", "tags": ["flavor"], "states": {}, "actions": ["look"], "contents": [] },
+                { "id": "coat", "displayName": "Coat", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["restaurant_receipt"] }
+              ],
+              "npcs": ["neighbor_mrs_kline"]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "The apartment is cramped and stale. Dust glitters in the lamplight." },
+            { "type": "narrator", "text": "You slow your breath and trace the scene—dust motes, scuff marks, anything out of place." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Rain taps the cracked window. Someone left in a hurry.",
+      "neighborhood": "Residential Row",
+      "weatherPool": [
+        "Rain ticks on the sill.",
+        "Fog presses close to the brick.",
+        "Damp air clings to the hallway."
+      ],
+      "activityPool": [
+        "Bo rubs the sleep from his eyes.",
+        "Bo listens—stairs creak somewhere above.",
+        "Bo flicks ash into an old tray."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/VNMcb6B2/journalistapartment.png",
+        "arrivalImageRain": "https://i.postimg.cc/VNMcb6B2/journalistapartment.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_RESIDENTIAL"
+      },
+      "enterHint": "This is the victim's apartment.\n\nType */enter apartment* to investigate the interior."
+    },
+    {
+      "id": "1,2",
+      "name": "Castle End Park",
+      "arrival": {
+        "text": "You are now at *Castle End Park*. A quiet patch of green in the heart of Bloodhaven — a place where lovers stroll, families linger, and nature nerds count pigeons. But tonight, the laughter is gone. Only an empty park bench and an old man tossing breadcrumbs into the shadows remain… and even the pigeons seem uneasy.",
+        "images": ["https://i.postimg.cc/j231104z/parkbench.png"]
+      },
+      "structures": [],
+      "flavor": "A quiet patch of green gone hushed; only an old man and uneasy pigeons.",
+      "neighborhood": "City Park Edge",
+      "weatherPool": [
+        "A fine drizzle beads on the bench.",
+        "Wind combs the treetops.",
+        "Mist halos the lamps."
+      ],
+      "activityPool": [
+        "Bo stretches his back.",
+        "Bo watches pigeons scatter.",
+        "Bo scans faces passing by."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/j231104z/parkbench.png",
+        "arrivalImageRain": "https://i.postimg.cc/j231104z/parkbench.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_PARK"
+      }
+    },
+    {
+      "id": "1,3",
+      "name": "La Belle Cuisine",
+      "arrival": {
+        "text": "You stand outside *La Belle Cuisine*. Polished cutlery, nervous staff. The smell of citrus and fear.",
+        "images": ["https://i.postimg.cc/63fJYmP0/labellecuisine.png"]
+      },
+      "structures": [
+        {
+          "id": "dining_hall",
+          "displayName": "La Belle Cuisine",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                { "id": "prep_table", "displayName": "Prep Table", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["cast_iron_skillet"] },
+                {
+                  "id": "filing_cabinet",
+                  "displayName": "Filing Cabinet",
+                  "tags": ["openable", "lockable"],
+                  "states": { "opened": false },
+                  "actions": ["look", "search", "use", "open"],
+                  "lock": {
+                    "type": "key",
+                    "locked": true,
+                    "requiredItem": "editor_note",
+                    "lockedHint": "The drawer won’t give without proper authorization.",
+                    "onUnlockMsg": "A quiet click—drawers slide open.",
+                    "autoOpenOnUnlock": false
+                  },
+                  "contents": ["supply_order", "rooftop_code"]
+                },
+                { "id": "locker", "displayName": "Locker", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": [] }
+              ],
+              "npcs": ["hostess_lena", "chef_marco"]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "Front of house hums; behind the door, the kitchen clatters." },
+            { "type": "narrator", "text": "You read the room—anxious eyes, hurried whispers, crumbs of truth under all that polish." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Polished cutlery, nervous staff. The smell of citrus and fear.",
+      "neighborhood": "Restaurant Row",
+      "weatherPool": [
+        "Rain slicks the awning.",
+        "Steam fogs the front glass.",
+        "Wind rattles the menu frame."
+      ],
+      "activityPool": [
+        "Bo straightens his tie—barely.",
+        "Bo notes the hurried bussers.",
+        "Bo lingers by the doorway, watching."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/63fJYmP0/labellecuisine.png",
+        "arrivalImageRain": "https://i.postimg.cc/63fJYmP0/labellecuisine.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_RESTAURANT_EXTERIOR"
+      },
+      "enterHint": "This is a restaurant. Type */enter restaurant* to investigate the interior."
+    },
+    {
+      "id": "2,1",
+      "name": "Alleyway",
+      "arrival": {
+        "text": "You slip into a narrow *Alleyway*. Wet crates, a flickering bulb, and nothing useful.",
+        "images": ["https://i.postimg.cc/h4Y7KZvv/alleyway.png"]
+      },
+      "structures": [],
+      "flavor": "Wet crates, a flickering bulb, and nothing useful.",
+      "neighborhood": "Back Alleys",
+      "weatherPool": [
+        "A cold drip echoes from the gutter.",
+        "Wind threads through fire escapes.",
+        "Rain whispers on trash lids."
+      ],
+      "activityPool": [
+        "Bo checks over his shoulder.",
+        "Bo steps around a dark puddle.",
+        "Bo listens for a second set of footsteps."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/h4Y7KZvv/alleyway.png",
+        "arrivalImageRain": "https://i.postimg.cc/h4Y7KZvv/alleyway.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_ALLEY"
+      }
+    },
+    {
+      "id": "2,2",
+      "name": "City Bank",
+      "arrival": {
+        "text": "You enter the *City Bank*. Marble floors, hushed voices. A vault waits behind the counter.",
+        "images": ["https://i.postimg.cc/2jgF0S40/citybank.png"]
+      },
+      "structures": [
+        {
+          "id": "branch_floor",
+          "displayName": "City Bank",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                {
+                  "id": "deposit_box_42",
+                  "displayName": "Deposit Box #42",
+                  "tags": ["openable", "lockable"],
+                  "states": { "opened": false },
+                  "actions": ["use", "search"],
+                  "lock": {
+                    "type": "key",
+                    "locked": true,
+                    "requiredItem": "safe_key",
+                    "lockedHint": "It’s locked. A tiny brass keyhole stares back at you.",
+                    "autoOpenOnUnlock": true,
+                    "onUnlockMsg": "A soft click—Box #42 opens."
+                  },
+                  "contents": ["usb_drive", "draft_print", "restaurant_card"]
+                }
+              ],
+              "npcs": ["bank_manager_arthur"]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "This is an old-fashioned bank. It could use some renovations. I wonder how safe my money would be here." },
+            { "type": "narrator", "text": "You study counters and corners—tellers’ glances, keyholes, and the quiet places money hides." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Marble, hush, and the scent of ink and money.",
+      "neighborhood": "Financial District",
+      "weatherPool": [
+        "Rain needles the marble steps.",
+        "Fog drapes the columns.",
+        "Thunder rolls somewhere far."
+      ],
+      "activityPool": [
+        "Bo wipes water from his coat brim.",
+        "Bo clocks the guard’s posture.",
+        "Bo palms the key in his pocket."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/2jgF0S40/citybank.png",
+        "arrivalImageRain": "https://i.postimg.cc/2jgF0S40/citybank.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_BANK"
+      },
+      "enterHint": "This is a bank. Type */enter bank* to investigate the interior."
+    },
+    {
+      "id": "2,3",
+      "name": "Convenience Store",
+      "arrival": {
+        "text": "You push into a *Convenience Store*. Neon hum, stale coffee, bored clerk.",
+        "images": ["https://i.postimg.cc/7LPg5GkZ/conveniencestore.png"]
+      },
+      "structures": [],
+      "flavor": "Neon hum, stale coffee, bored clerk.",
+      "neighborhood": "Corner Mart Strip",
+      "weatherPool": [
+        "Rain patters on neon-lit glass.",
+        "Wind hums in the sign wiring.",
+        "Drizzle turns the sidewalk to mirror."
+      ],
+      "activityPool": [
+        "Bo scans the bulletin board.",
+        "Bo warms his hands near the coffee urn.",
+        "Bo notes a shadow loitering by the door."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/7LPg5GkZ/conveniencestore.png",
+        "arrivalImageRain": "https://i.postimg.cc/7LPg5GkZ/conveniencestore.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_CONVENIENCE"
+      }
+    },
+    {
+      "id": "3,1",
+      "name": "Rooftop Access",
+      "arrival": {
+        "text": "You reach the *Rooftop Access*. Wind howls over puddles. A keypad guards a steel door.",
+        "images": ["https://i.postimg.cc/zX36gvqp/rooftopaccess.png"]
+      },
+      "structures": [
+        {
+          "id": "staircore",
+          "displayName": "Rooftop Stairwell",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                {
+                  "id": "keypad",
+                  "displayName": "Keypad",
+                  "tags": ["openable","lockable"],
+                  "actions": ["use","open"],
+                  "states": { "opened": false },
+                  "lock": {
+                    "type": "code",
+                    "locked": true,
+                    "requiredItem": "rooftop_code",
+                    "lockedHint": "Red light. Wrong code or no authorization.",
+                    "autoOpenOnUnlock": false,
+                    "onUnlockMsg": "Green light. The stair door releases.",
+                    "onUnlockFlag": "rooftop_open"
+                  },
+                  "contents": []
+                },
+                { "id": "vent_stack", "displayName": "Vent Stack", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["metal_pipe_weapon"] },
+                {
+                  "id": "rooftop",
+                  "displayName": "Rooftop",
+                  "tags": ["searchable"],
+                  "states": {},
+                  "actions": ["search"],
+                  "visibleWhen": ["flag:rooftop_open"],
+                  "contents": ["bloody_knife"]
+                }
+              ],
+              "npcs": []
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "Concrete steps spiral upward. Damp air, a locked door above." },
+            { "type": "narrator", "text": "You run a gloved hand along the rail; footprints, smears, and scratches tell their own story." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Wind howls over puddles. City lights burn below.",
+      "neighborhood": "Industrial Rooftops",
+      "weatherPool": [
+        "Wind howls through the stairwell.",
+        "Rain pecks at the metal door.",
+        "Fog curls along the rails."
+      ],
+      "activityPool": [
+        "Bo cups a hand to shield a match.",
+        "Bo counts steps between landings.",
+        "Bo listens; the city breathes below."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/zX36gvqp/rooftopaccess.png",
+        "arrivalImageRain": "https://i.postimg.cc/zX36gvqp/rooftopaccess.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_ROOFTOP"
+      },
+      "enterHint": "This is a stairwell to the roof. Type */enter stairwell* to investigate the interior."
+    },
+    {
+      "id": "3,2",
+      "name": "Daily Ledger (Media House)",
+      "arrival": {
+        "text": "You arrive at the *Daily Ledger*. Phones ring, typewriter clacks, deadlines breathe down necks.",
+        "images": ["https://i.postimg.cc/Lss1Hctq/dailyledger.png"]
+      },
+      "structures": [
+        {
+          "id": "news_floor",
+          "displayName": "Daily Ledger Offices",
+          "enterable": true,
+          "toEnter": [],
+          "rooms": [
+            {
+              "id": "main",
+              "objects": [
+                { "id": "janitor_closet", "displayName": "Janitor's Closet", "tags": ["searchable"], "states": {}, "actions": ["search"], "contents": ["broom_handle"] },
+                { "id": "inbox_tray", "displayName": "Inbox Tray", "tags": ["searchable"], "states": {}, "actions": ["look","search"], "contents": ["chef_complaint_email","editor_note"] }
+              ],
+              "npcs": [
+                "receptionist_sophie",
+                { "id": "editor_mr_hale", "visibleWhen": ["flag:sophie_bank_hint"] }
+              ]
+            }
+          ],
+          "onEnter": [
+            { "type": "narrator", "text": "Reception is a sea of ringing phones. Offices wait beyond." },
+            { "type": "narrator", "text": "You clock badges, inbox trays, and who avoids your gaze." }
+          ],
+          "onEnterList": ["objects","npcs","items"]
+        }
+      ],
+      "flavor": "Phones ring, typewriter clacks, deadlines breathe down necks.",
+      "neighborhood": "Press District",
+      "weatherPool": [
+        "Rain streaks the newsroom windows.",
+        "Fog turns streetlights to halos.",
+        "Thunder rattles the frames."
+      ],
+      "activityPool": [
+        "Bo watches couriers sprint in.",
+        "Bo flips his notebook closed.",
+        "Bo notes the editor’s door—shut."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/Lss1Hctq/dailyledger.png",
+        "arrivalImageRain": "https://i.postimg.cc/Lss1Hctq/dailyledger.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_NEWSROOM"
+      },
+      "enterHint": "This is the media house. Type */enter ledger* to investigate the interior."
+    },
+    {
+      "id": "3,3",
+      "name": "Bus Stop",
+      "arrival": {
+        "text": "You are at the _*Bus Stop*_ Intersection.\n\nA drunk mutters conspiracy theories. Rain doesn’t care.",
+        "images": ["https://i.postimg.cc/7Lq5Kpss/busstop.png"]
+      },
+      "structures": [],
+      "flavor": "A drunk mutters conspiracy theories. Rain doesn’t care.",
+      "neighborhood": "Transit Edge",
+      "weatherPool": [
+        "Rain beads on the schedule plate.",
+        "Fog swallows the next stop.",
+        "Wind tugs the route map loose."
+      ],
+      "activityPool": [
+        "Bo checks the time.",
+        "Bo watches a bus hiss past.",
+        "Bo adjusts his collar against the wind."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/7Lq5Kpss/busstop.png",
+        "arrivalImageRain": "https://i.postimg.cc/7Lq5Kpss/busstop.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_TRANSIT"
+      }
+    }
+  ],
+
+  "items": [
+    {
+      "id": "safe_key",
+      "displayName": "Safe Key",
+      "name": "Safe Key",
+      "tags": ["key", "metal"],
+      "description": "Small brass key, lightly worn.",
+      "actions": ["take", "use"],
+      "messages": {
+        "take": "You picked up *Safe Key*. Opens a certain deposit box.",
+        "useSuccess": "The key turns smoothly. The box clicks open.",
+        "useFail": "Wrong keyhole.",
+        "drop": "You let the Safe Key slip into your coat pocket instead."
+      }
+    },
+    { "id": "usb_hint_note", "displayName": "Note (USB)", "name": "Note (USB)", "actions": ["read","take"], "messages": { "take": "You pocket the note. A reminder about something hidden on a USB.", "drop": "You fold the note and tuck it away on the desk." } },
+    {
+      "id": "restaurant_receipt",
+      "displayName": "Restaurant Receipt",
+      "name": "Restaurant Receipt",
+      "actions": ["read","take"],
+      "content": "La Belle Cuisine — 221 Harbor Ave\nDate: {{yesterday_date:%m-%d-%Y}} 10:32 PM\nTable: 14 (2 covers)\nItems: Chef’s tasting x2, Bordeaux (bottle)\nTotal: $186.40\nBack: A faint grease stamp reads “La Belle Cuisine.”",
+      "messages": {
+        "take": "You picked up the *Receipt*. Stamped with *La Belle Cuisine*—might be worth a visit.",
+        "read": "La Belle Cuisine — 221 Harbor Ave\nDate: {{yesterday_date:%m-%d-%Y}} 10:32 PM\nTable: 14 (2 covers)\nItems: Chef’s tasting x2, Bordeaux (bottle)\nTotal: $186.40\nBack: A faint grease stamp reads \"La Belle Cuisine.\"",
+        "drop": "You slide the receipt back where you found it."
+      }
+    },
+    { "id": "usb_drive", "displayName": "USB Drive", "name": "USB Drive", "actions": ["take","read"], "messages": { "take": "You pocket the *USB*. Secrets tend to fit on tiny things.", "useSuccess": "Files open. Drafts and notes spill onto the screen.", "useFail": "No terminal to read this here.", "drop": "You’d rather not leave evidence lying around." } },
+    { "id": "draft_print", "displayName": "Article draft of a Review (Print)", "name": "Article draft of a Review (Print)", "actions": ["read","take"], "messages": { "take": "You take the draft. Edits in red ink tell their own story.", "drop": "You set the draft back in the tray." } },
+    { "id": "restaurant_card", "displayName": "Restaurant Card", "name": "Restaurant Card", "actions": ["read","take"], "messages": { "take": "You take the card. A number scribbled on the back.", "drop": "You leave the card where it was." } },
+    { "id": "chef_complaint_email", "displayName": "Chef Complaint", "name": "Chef Complaint (Printout)", "actions": ["read","take"], "messages": { "take": "You pocket the complaint. Someone disliked the draft.", "drop": "You slide the printout back into the tray." } },
+    { "id": "editor_note", "displayName": "Editor’s Note", "name": "Editor’s Note (Chef Schedule)", "actions": ["read","take","use"], "messages": { "take": "You take the editor’s note. This might unlock a door—figuratively or literally.", "useSuccess": "The staff recognizes the note. Access granted.", "useFail": "Waving paper won’t help here.", "drop": "You hand the note back—for now." } },
+    { "id": "supply_order", "displayName": "Supply Order", "name": "Supply Order (Rooftop Materials)", "actions": ["read","take"], "messages": { "take": "You take the order sheet. Odd supplies for a kitchen… perfect for a rooftop.", "drop": "You file the order back into the drawer." } },
+    { "id": "rooftop_code", "displayName": "Rooftop Code", "name": "Rooftop Access Code", "actions": ["read","take","use"], "messages": { "take": "You memorize the code and keep the slip.", "useSuccess": "Beep. The keypad turns green. Door unlocks.", "useFail": "The code panel flashes red.", "drop": "You tear the slip in half—then think better and keep it." } },
+    { "id": "bloody_knife", "displayName": "Bloody Knife", "name": "Bloody Kitchen Knife", "actions": ["read","take"], "messages": { "take": "You bag the knife. Thick smear at the bolster.", "read": "Chef’s knife. Subtle engraving on the hilt: 'M.' Dried blood along the handle.", "drop": "You really shouldn’t drop evidence." } },
+    { "id": "metal_pipe_weapon", "displayName": "Metal Pipe", "name": "Metal Pipe", "actions": ["take"], "messages": { "take": "You lift the heavy pipe. Cold. Stained.", "drop": "You set the pipe down carefully." } },
+    { "id": "cast_iron_skillet", "displayName": "Cast-Iron Skillet", "name": "Cast-Iron Skillet", "actions": ["take","use"], "messages": { "take": "You heft the skillet. Good for onions—or blocking doors.", "useSuccess": "You wedge the skillet under the handle. The door won’t budge.", "useFail": "Wrong angle—try another way.", "drop": "Too heavy to lug forever. You set it down." } },
+    { "id": "broom_handle", "displayName": "Broken Broom Handle", "name": "Broken Broom Handle", "actions": ["take","use"], "messages": { "take": "You grab the broken handle. Looks useless—until it isn’t.", "useSuccess": "You jam the handle into the hinge space. Door locked by leverage.", "useFail": "It slips free. Not like that.", "drop": "You ditch the splintered stick." } }
+  ],
+
+  "npcs": [
+    {
+      "id": "neighbor_mrs_kline",
+      "displayName": "Mrs. Kline",
+      "name": "Mrs. Kline (Neighbor)",
+      "dialogues": [
+        { "chapter": 1, "conditions": [], "lines": ["Mrs. Kline wipes her hands on her apron, thinking for a moment… _He left earlier with a man in a chef’s coat. They argued on the stairs._"] }
+      ]
+    },
+    {
+      "id": "bank_manager_arthur",
+      "displayName": "Arthur (Bank Manager)",
+      "name": "Arthur Blake (Bank Manager)",
+      "dialogues": [
+        { "chapter": 1, "lines": ["I’m sorry, I can’t grant access to deposit boxes without proper authorization."] },
+        { "chapter": 2, "conditions": ["hasItem:safe_key"], "lines": ["Arthur adjusts his tie, choosing his words carefully… _Yes, Mr. Montrose kept a small box. You may access it with that key._"] }
+      ]
+    },
+    {
+      "id": "receptionist_sophie",
+      "displayName": "Sophie (Reception)",
+      "name": "Sophie Hart (Reception)",
+      "dialogues": [
+        { "chapter": 1, "lines": ["Sophie straightens a stack of forms without looking up… _The editor’s quite busy. If you have something for him, please leave it on his desk._"] },
+        { "chapter": 2, "conditions": ["!flag:visited_structure_id:branch_floor"], "lines": ["Sophie lowers her voice behind the counter… _Sorry, everyone’s out right now. Maybe come back later?_"] },
+        { "chapter": 2, "conditions": ["flag:visited_structure_id:branch_floor"], "effects": ["flag:sophie_bank_hint"], "lines": ["Sophie glances up from the switchboard, relieved to see you… _The editor’s just back from the bank. He can see you now._"] },
+        { "chapter": 2, "conditions": ["hasItem:draft_print"], "effects": ["flag:sophie_draft_hint"], "lines": ["Her eyes flick to the papers in your hand… _Is that a review draft? The editor will want to see it immediately._"] }
+      ]
+    },
+    {
+      "id": "editor_mr_hale",
+      "displayName": "Editor Hale",
+      "name": "Editor Hale",
+      "dialogues": [
+        { "chapter": 1, "lines": ["I can’t talk right now. Deadline’s looming, and I’m buried in copy."] },
+        { "chapter": 2, "conditions": ["flag:sophie_bank_hint"], "effects": ["flag:got_editor_note", "get:editor_note"], "lines": ["Hale closes the blinds and leans in… _Your guy chased a big story on the mayor… but he also poked Chef Marco. Here—his schedule. Don’t quote me._"] }
+      ]
+    },
+    {
+      "id": "hostess_lena",
+      "displayName": "Lena (Hostess)",
+      "name": "Lena Marlowe (Hostess)",
+      "dialogues": [
+        { "chapter": 1, "lines": ["Lena folds the reservation book closed with a practiced smile… _Welcome to La Belle Cuisine. We’re quite busy—please take a seat or wait at the bar._"] },
+        { "chapter": 2, "conditions": ["hasItem:restaurant_receipt"], "effects": ["flag:lena_receipt_hint"], "lines": ["Her gaze drops to the grease-stamped slip… _Ah, that receipt. Yes, I remember that table._"] },
+        { "chapter": 3, "conditions": ["flag:got_editor_note"], "lines": ["Lena keeps her smile thin, eyes on the kitchen door… _Chef’s in and out. Office is locked tight unless you’ve got a reason._"] },
+        { "chapter": 3, "conditions": ["hasItem:draft_print"], "effects": ["flag:lena_draft_hint"], "lines": ["She nods at the marked-up pages… _A review draft like that can make enemies. Careful where you wave it._"] }
+      ]
+    },
+    {
+      "id": "chef_marco",
+      "displayName": "Chef Marco",
+      "name": "Chef Marco Delacroix",
+      "dialogues": [
+        { "chapter": 1, "lines": ["Sorry, the kitchen is hectic right now—if you’re not staff, please stay out of the way."] },
+        { "chapter": 3, "conditions": ["!flag:proofs_ready"], "lines": ["Marco wipes his hands on a pristine towel, voice butter-smooth… _Terrible what happened. The mayor’s people are ruthless. You should look there._"] },
+        { "chapter": 4, "conditions": ["flag:proofs_ready"], "lines": ["Marco’s jaw tightens as he meets your eyes… _…This is ridiculous. None of that proves anything._"] }
+      ],
+      "presentResponses": {
+        "bloody_knife": {
+          "effects": ["flag:proofs_ready"],
+          "lines": [
+            "Marco freezes when he sees the blade. _That's not— look, knives go missing all the time._ His eyes flick to the exit. _You can’t prove…_"
+          ]
+        },
+        "supply_order": {
+          "effects": ["flag:proofs_ready"],
+          "lines": [
+            "Marco’s jaw twitches at the order sheet. _Paperwork’s messy. Doesn’t mean anything._ The protest sounds thin, even to him."
+          ]
+        }
+      }
+    }
+  ],
+
+  "chapters": [
+    {
+      "id": 1,
+      "name": "The Call & the Scene",
+      "goals": [
+        { "id": "visit_apartment", "type": "visit", "target": "1,1" },
+        { "id": "find_receipt", "type": "find", "target": "restaurant_receipt" },
+        { "id": "talk_neighbor", "type": "talk", "target": "neighbor_mrs_kline" }
+      ],
+      "onComplete": ["flag:chapter1_complete"],
+      "summary": "You’ve got your first lead — a dinner receipt from *La Belle Cuisine*. Clara swears Gavin never ate there. If that’s true, someone wanted him there… but why?",
+      "hints": {
+        "visit_apartment": { "t1": "Start at the victim’s home.", "t2": "Go to the *Journalist’s Apartment*.", "t3": "Search his *desk* and *coat*." },
+        "find_receipt": { "t1": "Check personal effects.", "t2": "Search the *coat*.", "t3": "Take the *restaurant receipt*." },
+        "talk_neighbor": { "t1": "Someone nearby saw an argument.", "t2": "Talk to *Mrs. Kline*.", "t3": "Ask who Gavin argued with." }
+      }
+    },
+    {
+      "id": 2,
+      "name": "Money and Motives",
+      "goals": [
+        { "id": "visit_bank", "type": "visit", "target": "2,2", "effects": ["flag:bank_visited"] },
+        { "id": "open_box", "type": "use", "target": "safe_key", "conditions": ["at:2,2"], "effects": ["get:usb_drive","get:draft_print","get:restaurant_card"] },
+        { "id": "talk_editor", "type": "talk", "target": "editor_mr_hale", "conditions": ["flag:bank_visited"], "effects": ["flag:got_editor_note"] }
+      ],
+      "onComplete": ["flag:chapter2_complete"],
+      "summary": "The USB and drafts show two threads: the mayor—and Chef Marco. The editor slipped you the chef’s schedule. Time to visit the kitchen.",
+      "hints": {
+        "visit_bank": { "t1": "Follow the money.", "t2": "Go to the *Bank*.", "t3": "Use the *safe key* at the deposit box." },
+        "open_box": { "t1": "He stored something small.", "t2": "Open box 42.", "t3": "Take the *USB drive* and *draft*." },
+        "talk_editor": { "t1": "The newsroom has a gatekeeper.", "t2": "Talk to *Sophie*, then the *Editor*.", "t3": "Ask for the *chef’s schedule*." }
+      }
+    },
+    {
+      "id": 3,
+      "name": "The Chef’s Secrets",
+      "goals": [
+        { "id": "visit_restaurant", "type": "visit", "target": "1,3" },
+        { "id": "unlock_office", "type": "use", "target": "editor_note", "conditions": ["atStructure:chef_office"], "effects": ["unlock:filing_cabinet"] },
+        { "id": "collect_rooftop_clues", "type": "find", "target": "supply_order", "effects": ["get:rooftop_code"] }
+      ],
+      "onComplete": ["flag:chapter3_complete","flag:proofs_partial"],
+      "summary": "The office files tie the restaurant to rooftop supplies—and you’ve got the access code. The wind on that roof carries secrets.",
+      "hints": {
+        "visit_restaurant": { "t1": "Dinner plans led somewhere obvious.", "t2": "Go to *La Belle Cuisine*.", "t3": "Find the *office*." },
+        "unlock_office": { "t1": "Access beats force.", "t2": "Use what the *editor* gave you.", "t3": "Use the *editor’s note* to open the *filing cabinet*." },
+        "collect_rooftop_clues": { "t1": "Follow the paper trail.", "t2": "Search the *filing cabinet*.", "t3": "Grab the *supply order* and note the *rooftop code*." }
+      }
+    },
+    {
+      "id": 4,
+      "name": "Confrontation on the Rooftop",
+      "goals": [
+        { "id": "enter_rooftop", "type": "use", "target": "rooftop_code", "conditions": ["at:3,1"], "effects": ["unlock:keypad","flag:rooftop_open"] },
+        { "id": "find_weapon", "type": "find", "target": "metal_pipe_weapon" },
+        { "id": "link_proofs", "type": "set", "target": "flag:proofs_ready" }
+      ],
+      "onComplete": ["flag:case_solved"],
+      "summary": "Piece by piece, the story breaks: access, supplies, the weapon. Chef Marco’s bluster fades with the sirens. Justice, for once, is louder than the rain.",
+      "hints": {
+        "enter_rooftop": { "t1": "You have the code. Use it.", "t2": "At *Rooftop Access*, use *rooftop_code*.", "t3": "Open the *keypad* door." },
+        "find_weapon": { "t1": "Look where cold air whispers.", "t2": "Search the *vent stack*.", "t3": "Take the *metal pipe*." },
+        "link_proofs": { "t1": "Objects tell stories together.", "t2": "Combine *supply order* + *code* + *pipe*.", "t3": "That’s enough to make him crack." }
+      },
+      "finale": {
+        "escape_sequence": {
+          "image": "angry",
+          "audio_prompt": "wife_escape_alert",
+          "prompt": "Use an item to block the door! (type: use skillet / use broom)",
+          "valid_items": ["cast_iron_skillet","broom_handle"],
+          "success_text": "You jam the door with the {item}. The Chef slams into it and crumples. Officers pour in. It’s over.",
+          "fail_text": "The {item} clatters uselessly. He slips into the alley—sirens close in. Moments later: cuffs. Justice still lands, thanks to your proof."
+        }
+      }
+    }
+  ],
+
+  "softGates": [
+    { "id": "media_house_gate", "when": "!flag:bank_visited", "effect": "npc:receptionist_sophie says \"The boss went to the bank. He’ll be back shortly. Pop in later!\"" },
+    { "id": "chef_office_gate", "when": "!flag:got_editor_note", "effect": "object:filing_cabinet remains locked at restaurant office" },
+    { "id": "rooftop_gate", "when": "!item:rooftop_code", "effect": "object:keypad remains locked at rooftop access" }
+  ],
+
+  "proofs": ["supply_order","rooftop_code","metal_pipe_weapon"],
+
+  "lexicon": {
+    "actions": {
+      "move": ["go","walk","head"],
+      "enter": ["in","enter"],
+      "exit": ["out","leave","quit"],
+      "look": ["look","inspect","examine"],
+      "search": ["search","check","rifle"],
+      "talk": ["talk","speak","ask"],
+      "take": ["take","grab","pick"],
+      "use": ["use","apply"],
+      "read": ["read"],
+      "open": ["open"],
+      "present": ["present","show"],
+      "next": ["next", "continue", "more"]
+    },
+    "items": {
+      "bill": "restaurant_receipt",
+      "broom": "broom_handle",
+      "card": "restaurant_card",
+      "code": "rooftop_code",
+      "draft": "draft_print",
+      "editor": "editor_note",
+      "key": "safe_key",
+      "knife": "bloody_knife",
+      "note": "usb_hint_note",
+      "order": "supply_order",
+      "pipe": "metal_pipe_weapon",
+      "receipt": "restaurant_receipt",
+      "restaurant": "restaurant_receipt",
+      "review": "draft_print",
+      "skillet": "cast_iron_skillet",
+      "usb": "usb_drive"
+    },
+    "npcs": {
+      "chef": "chef_marco",
+      "marco": "chef_marco",
+      "lena": "hostess_lena",
+      "sophie": "receptionist_sophie",
+      "editor": "editor_mr_hale",
+      "hale": "editor_mr_hale",
+      "kline": "neighbor_mrs_kline"
+    }
+  }
+}

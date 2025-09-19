@@ -1,0 +1,26 @@
+{
+      "id": "2,3",
+      "name": "Convenience Store",
+      "arrival": {
+        "text": "You push into a *Convenience Store*. Neon hum, stale coffee, bored clerk.",
+        "images": ["https://i.postimg.cc/7LPg5GkZ/conveniencestore.png"]
+      },
+      "structures": [],
+      "flavor": "Neon hum, stale coffee, bored clerk.",
+      "neighborhood": "Corner Mart Strip",
+      "weatherPool": [
+        "Rain patters on neon-lit glass.",
+        "Wind hums in the sign wiring.",
+        "Drizzle turns the sidewalk to mirror."
+      ],
+      "activityPool": [
+        "Bo scans the bulletin board.",
+        "Bo warms his hands near the coffee urn.",
+        "Bo notes a shadow loitering by the door."
+      ],
+      "media": {
+        "arrivalImage": "https://i.postimg.cc/7LPg5GkZ/conveniencestore.png",
+        "arrivalImageRain": "https://i.postimg.cc/7LPg5GkZ/conveniencestore.png",
+        "arrivalAudio": "AUDIO_URL_AMBIENT_CONVENIENCE"
+      }
+    }
