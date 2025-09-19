@@ -1,4 +1,5 @@
-import { sendText } from "../services/whinself.js";
+import { tpl } from "../services/renderer.js";
+import { sendImage, sendText } from "../services/whinself.js";
 import { fuzzyMatch } from "../utils/fuzzyMatch.js";
 import { isRevealed } from "./_helpers/revealed.js";
 
@@ -119,6 +120,25 @@ function resolveObjectRow(id, game) {
   return fromCat || null;
 }
 
+function findRoomObjectByName(room, game, q) {
+  if (!room) return null;
+  const ids = (Array.isArray(room.objects) ? room.objects : [])
+    .map((e) => (typeof e === "string" ? e : e && e.id))
+    .filter(Boolean);
+  const rows = ids.map((id) => resolveObjectRow(id, game)).filter(Boolean);
+  const target = rows.find(
+    (o) => norm(o.id) === norm(q) || norm(o.displayName) === norm(q)
+  );
+  if (target) return target;
+  const names = rows.map((o) => o.displayName || o.id);
+  const hit = fuzzyMatch(norm(q), names, { threshold: 0.6, maxResults: 1 });
+  if (hit && hit.match) {
+    const i = names.indexOf(hit.match);
+    return i >= 0 ? rows[i] : null;
+  }
+  return null;
+}
+
 const MODE_ALIASES = {
   objects: new Set(["objects", "object", "objs", "things"]),
   people: new Set(["people", "person", "npc", "npcs", "folk", "persons"]),
@@ -145,20 +165,31 @@ function resolveLookMode(input) {
 
 export async function run({ jid, user, game, state, args }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "You are not inside a building. Use /enter first.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "show.notInside") ||
+        "You are not inside a building. Use /enter first."
+    );
     return;
   }
 
   const loc = getCurrentLocation(game, state);
   const structure = getCurrentStructure(loc, state);
   if (!structure) {
-    await sendText(jid, "Structure not found here.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "show.noStructure") || "Structure not found here."
+    );
     return;
   }
 
   const room = getCurrentRoom(structure, state);
   if (!room) {
-    await sendText(jid, "You’re inside, but not in a defined room.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "show.noRoom") ||
+        "You’re inside, but not in a defined room."
+    );
     return;
   }
 
@@ -206,38 +237,53 @@ export async function run({ jid, user, game, state, args }) {
   const mode = resolveLookMode(rawMode);
 
   if (mode === "objects") {
-    await sendText(
-      jid,
-      `*Objects at this location:*\n\n${listToBullets(
-        objectNames,
-        "no obvious objects."
-      )}`
-    );
+    const header =
+      tpl(game?.ui, "show.objectsHeader") || "*Objects at this location:*";
+    const emptyMsg = tpl(game?.ui, "show.noObjects") || "no obvious objects.";
+    await sendText(jid, `${header}\n\n${listToBullets(objectNames, emptyMsg)}`);
     return;
   }
   if (mode === "people") {
-    await sendText(
-      jid,
-      `*People at this location:*\n\n${listToBullets(
-        npcNames,
-        "no one in sight."
-      )}`
-    );
+    const header =
+      tpl(game?.ui, "show.peopleHeader") || "*People at this location:*";
+    const emptyMsg = tpl(game?.ui, "show.noPeople") || "no one in sight.";
+    await sendText(jid, `${header}\n\n${listToBullets(npcNames, emptyMsg)}`);
     return;
   }
   if (mode === "items") {
-    const tip = "\n\nTip: use */investigate <item>* to read details.";
-    await sendText(
-      jid,
-      `*Items at this location:*\n\n${listToBullets(
-        itemNames,
-        "no items visible at first glance at this location."
-      )}${itemNames.length ? tip : ""}`
-    );
+    const header =
+      tpl(game?.ui, "show.itemsHeader") || "*Items at this location:*";
+    const emptyMsg =
+      tpl(game?.ui, "show.noItems") ||
+      "no items visible at first glance at this location.";
+    const tip =
+      tpl(game?.ui, "show.itemsTip", { cmd: "investigate" }) ||
+      "\n\nTip: use */investigate <item>* to read details.";
+    const body =
+      `${header}\n\n${listToBullets(itemNames, emptyMsg)}` +
+      (itemNames.length ? tip : "");
+    await sendText(jid, body);
     return;
   }
 
   if (rawMode) {
+    // Try object name in current room
+    const objRow = findRoomObjectByName(room, game, rawMode);
+    if (objRow) {
+      const name = objRow.displayName || objRow.id;
+      const msg =
+        (objRow.messages &&
+          (objRow.messages.showSuccess || objRow.messages.checkSuccess)) ||
+        `You regard *${name}*.`;
+      await sendText(jid, msg);
+      if (objRow.image) {
+        try {
+          await sendImage(jid, objRow.image, name);
+        } catch {}
+      }
+      return;
+    }
+
     // If the user typed an item name with /show, nudge them to use /investigate instead
     const invIds = Array.isArray(state.inventory) ? state.inventory : [];
     const hintIds = unique([...(invIds || []), ...(allItemIds || [])]);
@@ -253,39 +299,45 @@ export async function run({ jid, user, game, state, args }) {
     const targetId = keyToId.get(norm(rawMode));
     if (targetId) {
       const nm = resolveDisplayName(targetId, "item", game);
-      const tpl =
-        game.ui?.templates?.itemHint ||
-        "Items are crucial for your investigation. Carefully *{verb}* what you’ve found: */{cmd} {name}*.";
-      const msg = tpl
-        .replace("{verb}", "investigate")
-        .replace("{cmd}", "investigate")
-        .replace("{name}", nm);
-      await sendText(jid, msg);
+      const tmpl =
+        tpl(game?.ui, "itemHint", {
+          verb: "investigate",
+          cmd: "investigate",
+          name: nm,
+        }) ||
+        (
+          game.ui?.templates?.itemHint ||
+          "Items are crucial for your investigation. Carefully *{verb}* what you’ve found: */{cmd} {name}*."
+        )
+          .replace("{verb}", "investigate")
+          .replace("{cmd}", "investigate")
+          .replace("{name}", nm);
+      await sendText(jid, tmpl);
       return;
     }
 
     await sendText(
       jid,
-      "Your eyes wander, but focus falters. Try */show objects*, */show people*, or */show items*."
+      tpl(game?.ui, "show.unknownMode") ||
+        "Your eyes wander, but focus falters. Try */show objects*, */show people*, or */show items*."
     );
     return;
   }
 
   // Default summary
   const lines = [];
-  lines.push(
-    `*Objects here:*\n\n${listToBullets(objectNames, "no obvious objects.")}`
-  );
+  const hdrObj = tpl(game?.ui, "show.objectsHeader") || "*Objects here:*";
+  const hdrPeople = tpl(game?.ui, "show.peopleHeader") || "*People here:*";
+  const hdrItems = tpl(game?.ui, "show.itemsHeader") || "*Items here:*";
+  const emptyObj = tpl(game?.ui, "show.noObjects") || "no obvious objects.";
+  const emptyPeople = tpl(game?.ui, "show.noPeople") || "no one in sight.";
+  const emptyItems =
+    tpl(game?.ui, "show.noItems") || "no items visible at first glance.";
+
+  lines.push(`${hdrObj}\n\n${listToBullets(objectNames, emptyObj)}`);
   lines.push("");
-  lines.push(
-    `*People here:*\n\n${listToBullets(npcNames, "no one in sight.")}`
-  );
+  lines.push(`${hdrPeople}\n\n${listToBullets(npcNames, emptyPeople)}`);
   lines.push("");
-  lines.push(
-    `*Items here:*\n\n${listToBullets(
-      itemNames,
-      "no items visible at first glance."
-    )}`
-  );
+  lines.push(`${hdrItems}\n\n${listToBullets(itemNames, emptyItems)}`);
   await sendText(jid, lines.join("\n"));
 }

@@ -9,7 +9,9 @@ function suggestEnter(structures = []) {
   // prefer last word (Bank, Apartment, Diner, etc.)
   return words[words.length - 1].toLowerCase();
 }
-import { sendImage, sendText } from "../services/whinself.js";
+import { runEntityHook } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
+import { sendText } from "../services/whinself.js";
 
 function formatList(items = []) {
   const arr = items.filter(Boolean);
@@ -31,18 +33,24 @@ function getLocationById(game, id) {
   );
 }
 
-function pickRandom(pool = []) {
-  if (!Array.isArray(pool) || pool.length === 0) return "";
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
 export async function run({ jid, user, game, state, args }) {
+  // DEV mode: auto-complete intro/tutorial so registry gates won't block moving
+  if (process?.env?.CODING_ENV === "DEV") {
+    state.flags = state.flags || {};
+    state.flags.introDone = true;
+    state.flags.tutorialDone = true;
+    state.introActive = false;
+    if (state.flow && typeof state.flow === "object") state.flow.active = false;
+  }
   // Validate argument
   const rc = (args?.[0] || "").trim();
   if (!/^([1-3]{2})$/.test(rc)) {
     await sendText(
       jid,
-      "Invalid move. Use a 3x3 grid coordinate like */move 11*, */move 23*, */move 33*."
+      tpl(game?.ui, "move.invalid", {
+        examples: "*/move 11*, */move 23*, */move 33*",
+      }) ||
+        "Invalid move. Use a 3x3 grid coordinate like */move 11*, */move 23*, */move 33*."
     );
     return;
   }
@@ -50,8 +58,13 @@ export async function run({ jid, user, game, state, args }) {
   // Translate to cartridge id format "r,c"
   const id = rc; // plain two-digit form
   const loc = getLocationById(game, id);
+  const prevLoc = state.location ? getLocationById(game, state.location) : null;
   if (!loc) {
-    await sendText(jid, "No such intersection. The grid goes from 11 to 33.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "move.notFound") ||
+        "No such intersection. The grid goes from 11 to 33."
+    );
     return;
   }
 
@@ -60,8 +73,12 @@ export async function run({ jid, user, game, state, args }) {
   const currentPlain = current.replace(",", "");
   if (currentPlain === id) {
     const pool = game.ui?.moveSameLocationRemarks || [];
-    const fallback = ["You’re already here."];
-    const remark = pickRandom(pool.length ? pool : fallback);
+    const fallback = [
+      tpl(game?.ui, "move.alreadyHere") || "You’re already here.",
+    ];
+    const remark = pool.length
+      ? pool[Math.floor(Math.random() * pool.length)]
+      : fallback[0];
     await sendText(jid, remark);
     return;
   }
@@ -72,46 +89,49 @@ export async function run({ jid, user, game, state, args }) {
   state.structureId = null;
   state.roomId = null;
 
-  // Media: arrival image if available
-  const arrivalImg =
-    loc.media?.arrivalImage ||
-    (Array.isArray(loc.arrival?.images) ? loc.arrival.images[0] : null);
-  if (arrivalImg) {
-    try {
-      await sendImage(jid, arrivalImg, loc.name);
-    } catch {}
+  // Run exit hook for previous location, then arrival hook for new location
+  const ctx = { jid, user, game, state };
+  try {
+    if (prevLoc) await runEntityHook(ctx, prevLoc, "onExit");
+  } catch {}
+  try {
+    await runEntityHook(ctx, loc, "onArrival");
+  } catch {}
+
+  // Fallback narrative if no hooks are defined on the new location
+  const hasArrivalHook =
+    Array.isArray(loc.onArrival) && loc.onArrival.length > 0;
+  if (!hasArrivalHook) {
+    const structuresAll = Array.isArray(loc.structures) ? loc.structures : [];
+    const structures = structuresAll.map((s) => s.displayName).filter(Boolean);
+    const enterableNames = structuresAll
+      .filter((s) => s.enterable)
+      .map((s) => s.displayName)
+      .filter(Boolean);
+
+    const structuresList = formatList(structures);
+    const whereText =
+      tpl(game?.ui, "whereOutside", {
+        location: loc.name,
+        flavor: loc.flavor || "",
+        structures: structuresList,
+      }) ||
+      `You’re at *${loc.name}*. ${
+        loc.flavor || ""
+      }\n\n*Around you:* ${structuresList}`;
+
+    const arrived =
+      tpl(game?.ui, "move.arrived") || "You arrived at your destination.";
+    const parts = [arrived, whereText];
+
+    if (enterableNames.length) {
+      const enterSuggest = suggestEnter(enterableNames);
+      const hint =
+        tpl(game?.ui, "move.enterHint", { suggest: enterSuggest }) ||
+        `Use */enter ${enterSuggest}* to step inside.`;
+      parts.push(`\n${hint}`);
+    }
+
+    await sendText(jid, parts.join("\n\n"));
   }
-
-  // Flavor text
-  const flavorBase = loc.flavor || "";
-  const weather = pickRandom(loc.weatherPool || game.ui?.weatherPool);
-  const activity = pickRandom(loc.activityPool || game.ui?.activityPool);
-  const flavor = [flavorBase, weather, activity].filter(Boolean).join(" ");
-
-  // Arrival text using templates
-  const arrivalTpl = game.ui?.templates?.arrival;
-  const whereTpl = game.ui?.templates?.whereOutside;
-  const structuresAll = Array.isArray(loc.structures) ? loc.structures : [];
-  const structures = structuresAll.map((s) => s.displayName).filter(Boolean);
-  const enterableNames = structuresAll
-    .filter((s) => s.enterable)
-    .map((s) => s.displayName)
-    .filter(Boolean);
-
-  const structuresList = formatList(structures);
-  const whereText = whereTpl
-    ? String(whereTpl)
-        .replace("{location}", loc.name)
-        .replace("{flavor}", flavor)
-        .replace("{structures}", structuresList)
-    : `You’re at *${loc.name}*. ${flavor}\n\n*Around you:* ${structuresList}`;
-
-  const parts = [`You arrived at your destination.`, whereText];
-
-  if (enterableNames.length) {
-    const enterSuggest = suggestEnter(enterableNames);
-    parts.push(`\nUse */enter ${enterSuggest}* to step inside.`);
-  }
-
-  await sendText(jid, parts.join("\n\n"));
 }

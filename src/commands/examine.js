@@ -1,4 +1,5 @@
-import { sendImage, sendText } from "../services/whinself.js";
+import { sendText, sendMedia } from "../services/whinself.js";
+import { tpl } from "../services/renderer.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { isRevealed } from "./_helpers/revealed.js";
 
@@ -79,7 +80,11 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
   // b) Otherwise resolve by args against inventory + revealed-in-room
   if (!target) {
     if (!token) {
-      await sendText(jid, "Examine what? Try */examine receipt*.");
+      await sendText(
+        jid,
+        tpl(game?.ui, "examine.what", { example: "/examine receipt" }) ||
+          "Examine what? Try */examine receipt*."
+      );
       return;
     }
 
@@ -100,6 +105,7 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
       ) || null;
     if (matchObj0) {
       const hint =
+        tpl(game?.ui, "examine.itemsOnly") ||
         game.ui?.templates?.examineItemsOnly ||
         "This is not an item. You can only examine items.";
       await sendText(jid, hint);
@@ -173,13 +179,12 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
     }
 
     if (!target) {
-      const names = scoped.map((i) => `*${displayNameFor(i)}*`);
-      await sendText(
-        jid,
-        names.length
-          ? `Currently, No such item to examine.`
-          : "No examinable items here."
-      );
+      const names = scoped.map((i) => `*${displayNameFor(i)}*`).join(", ");
+      const msg = names
+        ? tpl(game?.ui, "examine.notFound", { names }) ||
+          `No such item to examine. Try one of: ${names}`
+        : tpl(game?.ui, "examine.noneHere") || "No examinable items here.";
+      await sendText(jid, msg);
       return;
     }
   }
@@ -222,41 +227,73 @@ export async function run({ jid, game, state, args, candidates: candArg }) {
   const inVisibleRoomPool = visiblePool2.has(item.id);
   const revealedHere = inVisibleRoomPool && isRevealed(state, item.id);
   if (!(inInventory || revealedHere)) {
-    await sendText(
-      jid,
-      `You can only examine items that are in your inventory or have been revealed in this location. *${name}* is not accessible yet.`
-    );
+    const msg =
+      tpl(game?.ui, "examine.notAccessible", { name }) ||
+      `You can only examine items that are in your inventory or have been revealed in this location. *${name}* is not accessible yet.`;
+    await sendText(jid, msg);
     return;
   }
 
-  // 3) Compose message and media
+  // 3) Compose message and media (prefer per-item copy)
   const ex = item.examine || {};
-  const msg =
-    ex.message ||
-    item?.messages?.examine ||
-    item?.description ||
-    `You examine *${name}* closely.`;
+  const m = item.messages || {};
+  let msg = null;
+  // Highest priority: explicit success template on the item
+  if (typeof m.examineSuccessTpl === "string" && m.examineSuccessTpl) {
+    msg = m.examineSuccessTpl.replace(/\{\s*name\s*\}/g, name);
+  }
+  // Next: explicit success text on the item
+  if (!msg && typeof m.examineSuccess === "string" && m.examineSuccess) {
+    msg = m.examineSuccess;
+  }
+  // Next: generic item-level examine text
+  if (!msg && typeof m.examine === "string" && m.examine) {
+    msg = m.examine;
+  }
+  // Next: per-item examine block
+  if (!msg && ex.textTpl) {
+    msg = tpl(game?.ui, ex.textTpl, { name });
+  }
+  if (!msg && ex.message) {
+    msg = ex.message;
+  }
+  // Next: description fallback
+  if (!msg && item?.description) {
+    msg = item.description;
+  }
+  // Final fallback
+  if (!msg) {
+    msg = `You examine *${name}* closely.`;
+  }
   await sendText(jid, msg);
 
   const media = Array.isArray(ex.media) ? ex.media : ex.media ? [ex.media] : [];
   if (media.length) {
-    for (const m of media) {
-      const url = typeof m === "string" ? m : m?.url || m?.src;
-      const cap = typeof m === "string" ? name : m?.caption || name;
-      if (!url) continue;
-      if (isImgUrl(url)) {
-        try {
-          await sendImage(jid, url, cap);
-        } catch {}
-      } else {
-        await sendText(jid, url);
-      }
-    }
+    const refs = media
+      .map((m) => {
+        if (typeof m === "string") {
+          return { type: isImgUrl(m) ? "image" : "doc", url: m, caption: name };
+        }
+        const url = m?.url || m?.src;
+        if (!url) return null;
+        const type = m.type || (isImgUrl(url) ? "image" : "doc");
+        return { type, url, caption: m.caption || name };
+      })
+      .filter(Boolean);
+    if (refs.length) await sendMedia(jid, refs);
   } else if (item.image && isImgUrl(item.image)) {
     try {
-      await sendImage(jid, String(item.image), name);
+      await sendMedia(jid, {
+        type: "image",
+        url: String(item.image),
+        caption: name,
+      });
     } catch {}
   } else if (item.file) {
-    await sendText(jid, String(item.file));
+    await sendMedia(jid, {
+      type: "doc",
+      url: String(item.file),
+      filename: name,
+    });
   }
 }

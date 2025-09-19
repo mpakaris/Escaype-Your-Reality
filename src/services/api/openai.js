@@ -52,6 +52,7 @@ export async function askOpenAI(
  * @returns {Promise<object>} parsed JSON or throws
  */
 export async function askOpenAIStructured(prompt, schema, options = {}) {
+  console.log("Prompt 2: ", JSON.toString(prompt));
   try {
     const response = await client.chat.completions.create({
       model: "gpt-5-nano",
@@ -179,5 +180,75 @@ export async function classifyNpcReply({
     }
     const def = indices[0] || 1;
     return { index: def, tag: map[def] || "vague" };
+  }
+}
+
+/**
+ * Analyzes user input text to determine the intended command, its arguments,
+ * target identifiers, and confidence level using OpenAI's structured output.
+ *
+ * @param {string} text - The user input text to interpret.
+ * @param {object} [context={}] - Contextual information including available commands, objects, items, and NPCs.
+ * @param {object} [options={}] - Optional overrides for the OpenAI API call such as temperature and max_tokens.
+ * @returns {Promise<object>} An object containing:
+ *  - command: {string} The identified command.
+ *  - args: {string[]} Array of argument strings for the command.
+ *  - targetIds: {object} Object containing optional target identifiers (item, object, npc).
+ *  - confidence: {number} Confidence score between 0 and 1 indicating certainty of the classification.
+ */
+export async function routeIntent(text, context = {}, options = {}) {
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      command: { type: "string" },
+      args: {
+        type: "array",
+        items: { type: "string" },
+      },
+      targetIds: {
+        type: "object",
+        properties: {
+          item: { type: "string" },
+          object: { type: "string" },
+          npc: { type: "string" },
+        },
+        additionalProperties: false,
+        required: ["item", "object", "npc"],
+      },
+      confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+      },
+    },
+    required: ["command", "args", "targetIds", "confidence"],
+  };
+
+  const { commands = [], objects = [], items = [], npcs = [] } = context;
+
+  const promptLines = [
+    `User input: ${text}`,
+    `Available commands: ${commands.join(", ")}`,
+    `Known objects: ${objects.join(", ")}`,
+    `Known items: ${items.join(", ")}`,
+    `Known NPCs: ${npcs.join(", ")}`,
+    "Always include targetIds.item, targetIds.object, and targetIds.npc. If a field is not applicable, set it to an empty string.",
+    "Return a JSON object with the following structure:",
+    JSON.stringify(schema, null, 2),
+  ];
+
+  try {
+    console.log("prompt Lines 1: ", JSON.toString(prompt));
+
+    const result = await askOpenAIStructured(promptLines.join("\n"), schema, {
+      temperature: 0,
+      max_tokens: 64,
+      ...options,
+    });
+    console.log("Route Intent Result: ", result);
+    return result;
+  } catch (err) {
+    return { command: "unknown", args: [], targetIds: {}, confidence: 0 };
   }
 }

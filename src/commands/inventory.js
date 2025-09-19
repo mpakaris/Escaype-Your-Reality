@@ -1,4 +1,5 @@
 import { sendText } from "../services/whinself.js";
+import { tpl } from "../services/renderer.js";
 
 const bullets = (arr) =>
   (arr || [])
@@ -34,11 +35,16 @@ export async function run({ jid, user, game, state }) {
 
   if (!names.length) {
     const empty =
-      game.ui?.templates?.inventoryEmpty || "Your pockets are empty.";
+      tpl(game?.ui, "inventory.empty") ||
+      game.ui?.templates?.inventoryEmpty ||
+      "Your pockets are empty.";
     await sendText(jid, empty);
     return;
   }
 
-  const header = game.ui?.templates?.inventoryHeader || "You’re carrying:";
+  const header =
+    tpl(game?.ui, "inventory.header") ||
+    game.ui?.templates?.inventoryHeader ||
+    "You’re carrying:";
   await sendText(jid, `${header}\n${bullets(names)}`);
 }

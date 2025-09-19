@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/v1/cartridge.schema.json",
+  "title": "RPG Engine Cartridge v1",
+  "type": "object",
+  "required": ["schemaVersion", "ui", "progression", "world"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+
+    "meta": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "localeDefault": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "ui": {
+      "type": "object",
+      "required": ["templates"],
+      "properties": {
+        "locale": { "type": "string" },
+        "templates": {
+          "type": "object",
+          "description": "All system strings keyed by id",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "media": {
+      "type": "object",
+      "properties": {
+        "baseUrl": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "inventory": { "type": "boolean", "default": false },
+        "currency": { "type": "boolean", "default": false },
+        "combat": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": true
+    },
+
+    "commands": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "type": "object",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "aliases": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "cooldown": { "type": "integer", "minimum": 0 },
+            "cost": { "type": "integer", "minimum": 0 },
+            "gates": { "$ref": "#/$defs/requirement" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "world": {
+      "type": "object",
+      "required": ["locations", "objects", "npcs", "items"],
+      "properties": {
+        "locations": { "type": "array", "items": { "$ref": "#/$defs/location" } },
+        "objects":   { "type": "array", "items": { "$ref": "#/$defs/object" } },
+        "npcs":      { "type": "array", "items": { "$ref": "#/$defs/npc" } },
+        "items":     { "type": "array", "items": { "$ref": "#/$defs/item" } }
+      },
+      "additionalProperties": false
+    },
+
+    "intro": { "$ref": "#/$defs/sequence" },
+    "tutorial": { "$ref": "#/$defs/sequence" },
+
+    "progression": {
+      "type": "object",
+      "required": ["chapters"],
+      "properties": {
+        "chapters": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/$defs/chapter" } },
+            { "$ref": "#/$defs/chapter" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "$defs": {
+    "chapter": {
+      "type": "object",
+      "required": ["id", "requires"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "$ref": "#/$defs/response" },
+        "requires": { "$ref": "#/$defs/requirement" },
+        "onChapterComplete": { "$ref": "#/$defs/effects" }
+      },
+      "additionalProperties": false
+    },
+
+    "mediaRef": {
+      "type": "object",
+      "required": ["type", "url"],
+      "properties": {
+        "type": { "enum": ["video", "audio", "image", "doc"] },
+        "url": { "type": "string" },
+        "caption": { "type": "string" },
+        "thumb": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "response": {
+      "type": "object",
+      "properties": {
+        "textTpl": { "type": "string" },
+        "media": { "type": "array", "items": { "$ref": "#/$defs/mediaRef" } }
+      },
+      "additionalProperties": false
+    },
+
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "oneOf": [
+          { "properties": { "setFlag": { "type": "string" } }, "required": ["setFlag"], "additionalProperties": false },
+          { "properties": { "incCounter": { "type": "string" }, "by": { "type": "integer" } }, "required": ["incCounter"], "additionalProperties": false },
+          { "properties": { "revealItems": { "type": "array", "items": { "type": "string" } } }, "required": ["revealItems"], "additionalProperties": false },
+          { "properties": { "sendMedia": { "type": "array", "items": { "$ref": "#/$defs/mediaRef" } } }, "required": ["sendMedia"], "additionalProperties": false },
+          { "properties": { "sendTextTpl": { "type": "string" }, "vars": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } } }, "required": ["sendTextTpl"], "additionalProperties": false }
+        ]
+      }
+    },
+
+    "sequence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/response" }
+    },
+
+    "requirement": {
+      "type": "object",
+      "oneOf": [
+        { "type": "object", "properties": { "allOf": {} }, "required": ["allOf"] },
+        { "type": "object", "properties": { "anyOf": {} }, "required": ["anyOf"] },
+        { "type": "object", "properties": { "not": {} }, "required": ["not"] },
+        { "type": "object", "properties": { "flag": {} }, "required": ["flag"] },
+        { "type": "object", "properties": { "item": {} }, "required": ["item"] },
+        { "type": "object", "properties": { "counterAtLeast": {} }, "required": ["counterAtLeast"] },
+        { "type": "object", "properties": { "locationIs": {} }, "required": ["locationIs"] },
+        { "type": "object", "properties": { "structureIs": {} }, "required": ["structureIs"] }
+      ],
+      "properties": {
+        "allOf": { "type": "array", "items": { "$ref": "#/$defs/requirement" } },
+        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/requirement" } },
+        "not": { "$ref": "#/$defs/requirement" },
+
+        "flag": { "type": "string" },
+        "item": { "type": "string" },
+        "counterAtLeast": {
+          "type": "object",
+          "required": ["key", "value"],
+          "properties": {
+            "key": { "type": "string" },
+            "value": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "locationIs": { "type": "string" },
+        "structureIs": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "location": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "onEnter": { "$ref": "#/$defs/effects" },
+        "onArrival": { "$ref": "#/$defs/effects" },
+        "onExit": { "$ref": "#/$defs/effects" }
+      },
+      "additionalProperties": true
+    },
+
+    "object": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "displayName": { "type": "string" },
+        "onOpen": { "$ref": "#/$defs/effects" },
+        "onExamine": { "$ref": "#/$defs/effects" },
+        "lock": {
+          "type": "object",
+          "properties": {
+            "type": { "enum": ["key", "code", "item", "openable", "breakable"] },
+            "isLocked": { "type": "boolean" },
+            "isOpened": { "type": "boolean" },
+            "broken": { "type": "boolean" },
+            "requiredItems": { "type": "array", "items": { "type": "string" } },
+            "onBreakMsg": { "type": "string" },
+            "breakFailMsg": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "npc": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "askCap": { "type": "integer", "minimum": 0, "default": 5 },
+        "truthAt": { "type": "integer", "minimum": 0, "default": 5 },
+        "onTalk": { "$ref": "#/$defs/effects" }
+      },
+      "additionalProperties": true
+    },
+
+    "item": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "onTake": { "$ref": "#/$defs/effects" }
+      },
+      "additionalProperties": true
+    }
+  },
+
+  "additionalProperties": true
+}

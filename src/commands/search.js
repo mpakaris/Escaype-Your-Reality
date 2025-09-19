@@ -1,3 +1,4 @@
+import { tpl } from "../services/renderer.js";
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { markRevealed } from "./_helpers/revealed.js";
@@ -55,6 +56,11 @@ const prettyId = (s) =>
     .toLowerCase()
     .replace(/\b\w/g, (m) => m.toUpperCase());
 
+const canon = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
 function nameOfItem(id, itemMap) {
   const it = itemMap[id];
   return (it && (it.displayName || it.name)) || prettyId(id);
@@ -69,26 +75,41 @@ export async function run({
   candidates: candArg,
 }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "You are not inside a building. Use /enter first.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "errors.notInside") ||
+        "You are not inside a building. Use /enter first."
+    );
     return;
   }
 
   const token = args && args.length ? args.join(" ") : "";
   if (!token) {
-    await sendText(jid, "Search what? Try */search desk* or */search coat*.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "search.prompt") ||
+        "Search what? Try */search desk* or */search coat*."
+    );
     return;
   }
 
   const loc = getLoc(game, state);
   const struct = getStruct(loc, state);
   if (!struct) {
-    await sendText(jid, "Structure not found.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "errors.structureNotFound") || "Structure not found."
+    );
     return;
   }
 
   const candidates = candArg || game?.candidates || {};
   let objectMap = getMap(candidates, "objects");
   let itemMap = getMap(candidates, "items");
+  // Always keep a full catalogue index to avoid losing fields like `lock`
+  const fullMap = asIndex(
+    game?.objects || game?.object_catalogue || game?.catalogue?.objects || []
+  );
   // Fallback if engine didn’t preload candidates
   if (!objectMap || !Object.keys(objectMap).length) {
     objectMap = asIndex(
@@ -104,7 +125,7 @@ export async function run({
   const room = getRoom(struct, state);
   const wantIds = new Set(room?.objects || []);
   const fromIndex = (room?.objects || [])
-    .map((id) => objectMap[id])
+    .map((id) => fullMap[id] || objectMap[id])
     .filter(Boolean);
   let objectsHere = fromIndex.filter((o) => condOk(o.visibleWhen, state));
   // Supplement from candidates array if the index missed some
@@ -117,7 +138,8 @@ export async function run({
         !have.has(o.id) &&
         condOk(o.visibleWhen, state)
       ) {
-        objectsHere.push(o);
+        const full = fullMap[o.id] || o;
+        objectsHere.push(full);
       }
     }
   }
@@ -127,9 +149,20 @@ export async function run({
       .toLowerCase()
       .trim();
   const tok = norm(token);
+  const tokCanon = canon(token);
+  // 1) exact match by id or displayName
   let obj = objectsHere.find(
     (o) => norm(o.id) === tok || norm(o.displayName) === tok
   );
+  // 2) startsWith match by canonicalized text (e.g., "deposit" → "Deposit Box #42")
+  if (!obj) {
+    obj = objectsHere.find((o) => {
+      const c1 = canon(o.displayName);
+      const c2 = canon(o.id);
+      return c1.startsWith(tokCanon) || c2.startsWith(tokCanon);
+    });
+  }
+  // 3) fuzzy fallback
   if (!obj) {
     const hit = fuzzyPickFromObjects(
       token,
@@ -153,14 +186,20 @@ export async function run({
       if (!names && Array.isArray(room?.objects) && room.objects.length)
         names = room.objects.map((id) => `*${prettyId(id)}*`).join(", ");
     }
-    await sendText(
-      jid,
-      names ? `Search what? Here you have: ${names}` : "Nothing here to search."
-    );
+    const listMsg = names
+      ? tpl(game?.ui, "search.promptWithList", { list: names }) ||
+        `Search what? Here you have: ${names}`
+      : tpl(game?.ui, "search.nothingHere") || "Nothing here to search.";
+    await sendText(jid, listMsg);
     return;
   }
 
   const name = obj.displayName || obj.id;
+  // Update active focus container so follow-up commands like /take know context
+  state.focus = {
+    containerId: obj.id,
+    updatedAt: Date.now(),
+  };
   const tags = Array.isArray(obj.tags) ? obj.tags : [];
   const searchable = tags.includes("searchable");
   const openable = tags.includes("openable");
@@ -174,31 +213,75 @@ export async function run({
   const isOpened =
     typeof oState.opened === "boolean" ? oState.opened : isOpenedBase;
 
+  const isBreakable = lock && lock.type === "breakable";
+  const isBroken =
+    typeof oState.broken === "boolean" ? oState.broken : !!lock.broken;
+
   if (openable && isLocked) {
-    await sendText(
-      jid,
-      `Hmmm, *${name}* seems locked. It will need a key or code.`
-    );
+    const msg =
+      obj.messages?.searchLocked ||
+      lock.lockedHint ||
+      tpl(game?.ui, "search.locked", { name }) ||
+      `Hmmm, *${name}* seems locked. It will need a key or code.`;
+    await sendText(jid, msg);
+    return;
+  }
+  // Breakable but not yet broken -> cannot be searched
+  if (isBreakable && !isBroken) {
+    const msg =
+      obj.messages?.searchFail ||
+      obj.messages?.searchFailMessage ||
+      obj.messages?.searchClosed ||
+      lock.breakFailMsg ||
+      tpl(game?.ui, "search.closedContainer", { name }) ||
+      `*${name}* cannot be searched yet.`;
+    await sendText(jid, msg);
     return;
   }
 
   // If it's an openable container and not locked, require opening before searching contents
   if (openable && !isOpened) {
-    await sendText(jid, `*${name}* is closed. Use */open* first.`);
+    const msg =
+      obj.messages?.searchClosed ||
+      tpl(game?.ui, "search.closedContainer", { name }) ||
+      `*${name}* is closed. Use */open* first.`;
+    await sendText(jid, msg);
     return;
   }
 
   if (!searchable && !(openable && isOpened)) {
-    await sendText(jid, `Nothing to search in *${name}*.`);
+    const msg =
+      obj.messages?.searchNothing ||
+      tpl(game?.ui, "search.resultsEmpty", { name }) ||
+      `Nothing to search in *${name}*.`;
+    await sendText(jid, msg);
     return;
   }
 
-  // Searchable surface or open container: list contents not yet in inventory
+  // Hard guard: never reveal contents if locked, closed, or unbroken breakable
+  if ((openable && (isLocked || !isOpened)) || (isBreakable && !isBroken)) {
+    const msg = isLocked
+      ? obj.messages?.searchLocked ||
+        lock.lockedHint ||
+        tpl(game?.ui, "search.locked", { name })
+      : obj.messages?.searchClosed ||
+        lock.breakFailMsg ||
+        tpl(game?.ui, "search.closedContainer", { name }) ||
+        `*${name}* cannot be searched right now.`;
+    await sendText(jid, msg);
+    return;
+  }
+
   const inv = Array.isArray(state.inventory) ? state.inventory : [];
   const contents = Array.isArray(obj.contents) ? obj.contents : [];
   const remaining = contents.filter((id) => !inv.includes(id));
   if (!remaining.length) {
-    await sendText(jid, `You search the *${name}*, but find nothing new.`);
+    const noneMsg =
+      obj.messages?.searchNothing ||
+      tpl(game?.ui, "search.resultsEmpty", { name }) ||
+      game?.ui?.templates?.search?.resultsEmpty ||
+      `You search the *${name}*, but whatever was here, is here no more.`;
+    await sendText(jid, noneMsg);
     return;
   }
   // Mark these items as revealed so they become takeable
@@ -207,10 +290,17 @@ export async function run({
   } catch {}
 
   const items = remaining.map((id) => `*${nameOfItem(id, itemMap)}*`);
-  await sendText(
-    jid,
-    `Happy the who shall search! The following items were found inside *${name}*:\n${bullets(
-      items
-    )}`
-  );
+  const itemsList = bullets(items);
+  const foundTpl = obj.messages?.searchFoundTpl;
+  if (foundTpl) {
+    const txt = foundTpl
+      .replace(/\{\s*name\s*\}/g, name)
+      .replace(/\{\s*items\s*\}/g, itemsList);
+    await sendText(jid, txt);
+  } else {
+    const header =
+      tpl(game?.ui, "search.resultsHeader", { name }) ||
+      `Inside *${name}* you find:`;
+    await sendText(jid, `${header}\n${itemsList}`);
+  }
 }

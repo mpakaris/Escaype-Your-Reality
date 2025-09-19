@@ -11,6 +11,7 @@ import * as inventoryCmd from "../commands/inventory.js";
 import * as moveCmd from "../commands/move.js";
 import * as nextCmd from "../commands/next.js";
 import * as openCmd from "../commands/open.js";
+import * as progressCmd from "../commands/progress.js";
 import * as readCmd from "../commands/read.js";
 import * as resetCmd from "../commands/reset.js";
 import * as searchCmd from "../commands/search.js";
@@ -19,9 +20,18 @@ import * as skipCmd from "../commands/skip.js";
 import * as takeCmd from "../commands/take.js";
 import * as talktoCmd from "../commands/talkto.js";
 import * as useCmd from "../commands/use.js";
+import { routeIntent } from "../services/api/openai.js";
 import { checkAndAdvanceChapter } from "../services/progress.js";
 import { sendText } from "../services/whinself.js";
 import { inSequence } from "./flow.js";
+
+import registry from "../commands/registry.js";
+import { applyEffects } from "../services/effects.js";
+
+import { mountCapabilities } from "../services/capabilities.js";
+
+import cartridgeLoader from "../services/cartridgeLoader.js";
+const { loadCartridgeFromDir } = cartridgeLoader;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,50 +147,28 @@ async function saveUser(userObj, statesFilePath, key) {
 
 async function loadGame(gameUUID) {
   const gameDir = path.resolve(ROOT, "src", "db", "games", gameUUID);
-  // general
-  const generalPath = path.resolve(gameDir, "general_object.jsonl");
-  const generalRows = await readJSONL(generalPath);
-  const general =
-    generalRows.find((r) => r.gameId === gameUUID) || generalRows[0] || {};
+  // Use cartridge loader + schema validation
+  const cart = loadCartridgeFromDir(gameDir);
 
-  // sequences
-  const sequences = {};
-  try {
-    const introRows = await readJSONL(path.resolve(gameDir, "intro.jsonl"));
-    const introRow =
-      introRows.find((r) => r.gameId === gameUUID) || introRows[0];
-    if (introRow?.data) sequences.intro = introRow.data;
-  } catch {}
-  try {
-    const tutorialRows = await readJSONL(
-      path.resolve(gameDir, "tutorial.jsonl")
-    );
-    const tutorialRow =
-      tutorialRows.find((r) => r.gameId === gameUUID) || tutorialRows[0];
-    if (tutorialRow?.data) sequences.tutorial = tutorialRow.data;
-  } catch {}
+  // Map to legacy engine surface to avoid downstream changes
+  const sequences = {
+    intro: Array.isArray(cart.intro) ? cart.intro : [],
+    tutorial: Array.isArray(cart.tutorial) ? cart.tutorial : [],
+  };
 
-  // locations (JSONL table, no fallback)
-  const locationsPath = path.resolve(gameDir, "locations.jsonl");
-  const locationRows = await readJSONL(locationsPath);
-  const locations = (locationRows || [])
-    .filter((r) => String(r.gameId) === String(gameUUID))
-    .map((r) => {
-      // Rows may already be in location shape. If a `data` wrapper exists, unwrap it.
-      if (r && r.data && typeof r.data === "object") return r.data;
-      const { gameId, ...rest } = r || {};
-      return rest;
-    });
-
-  // Compose legacy game object the engine expects
   const game = {
     id: gameUUID,
-    title: general.title || "",
-    ui: general.ui || {},
-    progression: general.progression || {},
-    media: general.media || {},
+    title: cart.meta?.title || cart.title || "",
+    ui: cart.ui || {},
+    progression: cart.progression || {},
+    media: cart.media || {},
+    capabilities: cart.capabilities || {},
     sequences,
-    locations,
+    locations:
+      cart.world && Array.isArray(cart.world.locations)
+        ? cart.world.locations
+        : [],
+    commands: cart.commands || {},
   };
   return game;
 }
@@ -205,6 +193,14 @@ const commands = {
   examine: examineCmd,
   ask: { run: askCmd },
 };
+
+function getRun(mod) {
+  if (!mod) return null;
+  if (typeof mod === "function") return mod; // default export imported directly
+  if (typeof mod?.run === "function") return mod.run; // named run
+  if (typeof mod?.default === "function") return mod.default; // default on namespace import
+  return null;
+}
 
 function getCurrentLocation(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
@@ -325,6 +321,10 @@ async function loadCandidatesLimited(gameUUID, ids) {
   // First try id-filtered read; if empty, fall back to all-by-game and filter in-memory
   let objectRows = await readMany(
     tryPaths([
+      "object.jsonl",
+      "objects.jsonl",
+      "object.json",
+      "objects.json",
       "object_catalogue.jsonl",
       "objects_catalogue.jsonl",
       "object_catalogue.json",
@@ -335,6 +335,10 @@ async function loadCandidatesLimited(gameUUID, ids) {
   if (!objectRows.length && objIds.size) {
     const allObjRows = await readMany(
       tryPaths([
+        "object.jsonl",
+        "objects.jsonl",
+        "object.json",
+        "objects.json",
         "object_catalogue.jsonl",
         "objects_catalogue.jsonl",
         "object_catalogue.json",
@@ -345,10 +349,28 @@ async function loadCandidatesLimited(gameUUID, ids) {
     objectRows = allObjRows.filter((r) => objIds.has(rowId(r)));
   }
   const objects = objectRows.map(unwrap);
+  // Deduplicate by id for objects and npcs as well
+  const objectsById = {};
+  for (const o of objects) if (o && o.id) objectsById[o.id] = o;
+  const objectsDedup = Object.values(objectsById);
+
+  // Include items contained in the loaded objects as candidates
+  // This enables commands like /take to resolve items revealed by /search or open containers
+  for (const o of objectsDedup) {
+    if (o && Array.isArray(o.contents)) {
+      for (const itId of o.contents) {
+        if (itId) itemIds.add(String(itId));
+      }
+    }
+  }
 
   // Merge and dedupe npcs from per-game and root, singular/plural, include .json variants
   const npcRows = await readMany(
     tryPaths([
+      "npc.jsonl",
+      "npcs.jsonl",
+      "npc.json",
+      "npcs.json",
       "npcs_catalogue.jsonl",
       "npc_catalogue.jsonl",
       "npcs_catalogue.json",
@@ -361,6 +383,10 @@ async function loadCandidatesLimited(gameUUID, ids) {
   // Items catalogue filename can be singular or plural and may live per-game or at root, include .json variants
   const itemRows = await readMany(
     tryPaths([
+      "item.jsonl",
+      "items.jsonl",
+      "item.json",
+      "items.json",
       "items_catalogue.jsonl",
       "item_catalogue.jsonl",
       "items_catalogue.json",
@@ -375,11 +401,6 @@ async function loadCandidatesLimited(gameUUID, ids) {
       return acc;
     }, {})
   );
-
-  // Deduplicate by id for objects and npcs as well
-  const objectsById = {};
-  for (const o of objects) if (o && o.id) objectsById[o.id] = o;
-  const objectsDedup = Object.values(objectsById);
 
   const npcsById = {};
   for (const n of npcs) if (n && n.id) npcsById[n.id] = n;
@@ -418,46 +439,114 @@ export async function handleIncoming({ jid, from, text }) {
   try {
     game = await loadGame(gameUUID);
   } catch (err) {
+    // Log full error for diagnostics in DEV/PROD
+    try {
+      console.error("[engine] loadGame failed:", err?.message || err);
+      if (err?.details)
+        console.error("[engine] validation details:", err.details);
+      if (err?.stack) console.error(err.stack);
+    } catch {}
     await sendText(jid, "Game content missing. Please try again later.");
     return;
   }
+
+  // Initialize command registry for this request
+  registry.init(game.commands || {}, game.ui?.templates || game.ui || {});
+  // Register existing command handlers to keep behavior unchanged
+  const builtIns = {
+    next: nextCmd,
+    reset: resetCmd,
+    exit: exitCmd,
+    skip: skipCmd,
+    move: moveCmd,
+    enter: enterCmd,
+    show: showCmd,
+    check: checkCmd,
+    progress: progressCmd,
+    take: takeCmd,
+    inventory: inventoryCmd,
+    read: readCmd,
+    drop: dropCmd,
+    use: useCmd,
+    talkto: talktoCmd,
+    open: openCmd,
+    search: searchCmd,
+    examine: examineCmd,
+    ask: { run: askCmd },
+  };
+  for (const [k, mod] of Object.entries(builtIns)) {
+    const fn = getRun(mod) || ((ctx) => Promise.resolve());
+    registry.registerHandler(k, async (ctx) => {
+      await fn(ctx);
+      return { effects: [] };
+    });
+  }
+
   const state =
     (user.currentState && user.currentState[gameUUID]) ||
     (user.currentState[gameUUID] = {});
   // Ensure command event log exists
   if (!Array.isArray(state.log)) state.log = [];
+  // Mount capabilities from cartridge onto state
+  try {
+    mountCapabilities(state, game);
+  } catch {}
 
+  // In DEV, force intro/tutorial skipped to avoid sequence gating during development
+  if (process?.env?.CODING_ENV === "DEV") {
+    state.flags = state.flags || {};
+    state.flags.introDone = true;
+    state.flags.tutorialDone = true;
+    state.introActive = false;
+    if (state.flow && typeof state.flow === "object") state.flow.active = false;
+  }
+
+  // --- Registry-based command parsing and gating ---
   const input = (text || "").trim();
-  const isCmd = input.startsWith("/");
-  const parts = isCmd ? input.slice(1).split(/\s+/) : [];
-  const cmd = parts[0]?.toLowerCase() || "";
-  const args = parts.slice(1);
-
-  const needsCatalog = new Set([
-    "show",
-    "check",
-    "open",
-    "search",
-    "take",
-    "read",
-    "drop",
-    "use",
-    "talkto",
-    "present",
-    "examine",
-    "ask",
-  ]);
+  let isCmd = input.startsWith("/");
+  let cmd = "";
+  let args = [];
+  let intentContext = null;
+  if (isCmd) {
+    const resolved = registry.resolve(input);
+    cmd = resolved.cmd;
+    args = resolved.args;
+  } else {
+    // Not a slash command: try intent routing
+    const intent = await routeIntent({ text: input, game, state });
+    if (intent && typeof intent === "object" && intent.command) {
+      // Check if intent.command matches a built-in or registry handler
+      const allCmds = new Set([
+        ...Object.keys(registry.handlers || {}),
+        ...Object.keys(commands),
+      ]);
+      if (allCmds.has(intent.command)) {
+        cmd = intent.command;
+        args = Array.isArray(intent.args) ? intent.args : [];
+        isCmd = true;
+        // Attach for debugging
+        intentContext = {
+          confidence: intent.confidence,
+          target: intent.target,
+          originalInput: input,
+        };
+      } else {
+        // Unknown intent command; treat as unknown
+        cmd = "";
+        args = [];
+      }
+    } else if (intent === "unknown") {
+      // Fallback: unknown intent
+      const msg =
+        game.ui?.templates?.unknownCommandGeneric || "Unknown command.";
+      await sendText(jid, msg);
+      return;
+    }
+  }
 
   if (inSequence(state)) {
-    const allowed = new Set(["next", "reset", "exit"]);
-    if (process.env.CODING_ENV === "DEV") {
-      allowed.add("skip");
-    }
-
-    const introLen = (game.sequences?.intro || []).length;
-    const atSeq = state.flow?.seq ?? 0;
-    const atStep = state.flow?.step ?? 0;
-
+    const allowed = new Set(["next", "reset", "exit", "progress"]);
+    if (process.env.CODING_ENV === "DEV") allowed.add("skip");
     if (!isCmd || !allowed.has(cmd)) {
       const msg =
         game.ui?.templates?.unknownCommandDuringIntro ||
@@ -466,22 +555,20 @@ export async function handleIncoming({ jid, from, text }) {
       return;
     }
   } else {
-    // When not in sequence, allow /move as valid command
-    const allowed = new Set(Object.keys(commands));
-    if (isCmd && !allowed.has(cmd)) {
-      await sendText(
-        jid,
-        game.ui?.templates?.unknownCommandGeneric || "Unknown command."
-      );
+    if (isCmd && !cmd) {
+      const msg =
+        game.ui?.templates?.unknownCommandGeneric || "Unknown command.";
+      await sendText(jid, msg);
       return;
     }
   }
 
   // Always honor reset/exit immediately to avoid being blocked by any gating
   if (isCmd && (cmd === "reset" || cmd === "exit")) {
-    const handler = commands[cmd];
-    if (handler?.run) {
-      await handler.run({ jid, user, game, state, args, candidates: null });
+    const handler = builtIns[cmd];
+    const run = getRun(handler);
+    if (run) {
+      await run({ jid, user, game, state, args, candidates: null });
       // Log command event
       state.log.push({
         t: Date.now(),
@@ -506,33 +593,29 @@ export async function handleIncoming({ jid, from, text }) {
     }
   }
 
-  const handler = commands[cmd];
-  if (!handler) {
-    await sendText(
-      jid,
-      game.ui?.templates?.unknownCommandGeneric || "Unknown command."
-    );
-    return;
-  }
-
-  // Normalize room context to single-room model
-  if (state.inStructure && state.structureId) {
-    try {
-      ensureRoomInStructure(game, state);
-    } catch {}
-  } else {
-    // outside any structure, keep roomId unset
-    if (state.roomId) state.roomId = null;
-  }
-
+  // Candidate loading using resolved cmd (logic unchanged, but after sequence gating)
+  const needsCatalog = new Set([
+    "show",
+    "check",
+    "open",
+    "search",
+    "take",
+    "read",
+    "drop",
+    "use",
+    "talkto",
+    "present",
+    "examine",
+    "ask",
+  ]);
   if (needsCatalog.has(cmd)) {
     // Collect only the ids present in the current room for targeted preloading
     if (state.inStructure && state.structureId) {
       ensureRoomInStructure(game, state);
     }
     const ids = collectCandidateIds(game, state);
-    // Ensure catalogue rows exist for inventory and revealed items when examining
-    if (cmd === "examine") {
+    // Ensure catalogue rows exist for inventory and revealed items when examining or using
+    if (cmd === "examine" || cmd === "use") {
       const inv = Array.isArray(state.inventory) ? state.inventory : [];
       const rev = Array.isArray(state.revealedItems) ? state.revealedItems : [];
       if (inv.length || rev.length) {
@@ -562,6 +645,7 @@ export async function handleIncoming({ jid, from, text }) {
     game.candidates = candidates;
   }
 
+  // --- Dispatch via registry, apply effects ---
   const ctx = {
     jid,
     user,
@@ -570,7 +654,22 @@ export async function handleIncoming({ jid, from, text }) {
     args,
     candidates: game.candidates || null,
   };
-  await handler.run(ctx);
+  // Attach intent routing info to ctx for debugging if present
+  if (intentContext) {
+    ctx.intent = intentContext;
+  }
+  // Dispatch via registry. Handlers call the legacy modules. Registry may also return effects (e.g., gating messages).
+  const dispatchRes = isCmd
+    ? await registry.dispatch(ctx, input)
+    : { effects: [] };
+  if (
+    dispatchRes &&
+    Array.isArray(dispatchRes.effects) &&
+    dispatchRes.effects.length
+  ) {
+    await applyEffects({ jid, user, game, state }, dispatchRes.effects);
+  }
+
   // Generic visit flags: mark location and structure visits in user state
   try {
     state.flags =
@@ -604,6 +703,7 @@ export async function handleIncoming({ jid, from, text }) {
     location: state.location || null,
     inStructure: !!state.inStructure,
     structureId: state.structureId || null,
+    ...(intentContext ? { intent: intentContext } : {}),
   });
   if (state.log.length > 1000) state.log = state.log.slice(-1000);
   await checkAndAdvanceChapter({ jid, game, state });

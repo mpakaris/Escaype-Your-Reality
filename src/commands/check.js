@@ -1,3 +1,4 @@
+import { tpl } from "../services/renderer.js";
 import { sendImage, sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { isRevealed } from "./_helpers/revealed.js";
@@ -49,7 +50,7 @@ function getRoom(struct, state) {
   return (struct?.rooms || []).find((r) => r.id === state.roomId) || null;
 }
 
-function pickCheckMessage(obj, state) {
+function pickCheckMessage(obj, state, ui) {
   const name = obj.displayName || obj.id;
   const tags = Array.isArray(obj.tags) ? obj.tags : [];
   const lock = obj.lock || {};
@@ -63,23 +64,30 @@ function pickCheckMessage(obj, state) {
   const msg = obj.messages || {};
 
   // Primary: author-provided description
-  if (msg.checkSuccess) return msg.checkSuccess;
-  if (msg.checkFail) return msg.checkFail; // if author prefers a terse variant
+  let desc = msg.checkSuccess || msg.checkFail || null;
+  if (!desc) {
+    // Minimal fallback description if author omitted
+    if (tags.includes("searchable"))
+      desc = `You inspect *${name}*. Could be worth a */search*.`;
+    else if (isOpenable)
+      desc = `You inspect *${name}*. A functional container.`;
+    else desc = `You inspect *${name}*.`;
+  }
 
-  // Fallbacks for MVP if messages are absent
+  // Status hint, object-local first, then lock hints, then global templates
+  let hint = "";
   if (isOpenable && isLocked) {
-    return `You inspect *${name}*. It appears locked.`;
+    hint =
+      msg.searchLocked ||
+      lock.lockedHint ||
+      tpl(ui, "search.locked", { name }) ||
+      "";
+  } else if (isOpenable && !isOpened) {
+    hint =
+      msg.searchClosed || tpl(ui, "search.closedContainer", { name }) || "";
   }
-  if (isOpenable && !isOpened) {
-    return `You inspect *${name}*. It’s closed. Try */open ${name
-      .split(/\s+/)
-      .pop()
-      .toLowerCase()}*.`;
-  }
-  if (tags.includes("searchable")) {
-    return `You inspect *${name}*. Could be worth a */search*.`;
-  }
-  return `You inspect *${name}*. Nothing unusual.`;
+
+  return hint ? `${desc}\n\n${hint}` : desc;
 }
 
 export async function run({
@@ -250,7 +258,12 @@ export async function run({
     return;
   }
 
-  await sendText(jid, pickCheckMessage(obj, state));
+  // Update active focus container so follow-up commands like /take know context
+  state.focus = {
+    containerId: obj.id,
+    updatedAt: Date.now(),
+  };
+  await sendText(jid, pickCheckMessage(obj, state, game?.ui));
   if (obj.image) {
     try {
       await sendImage(jid, String(obj.image), obj.displayName || obj.id || "");

@@ -7,6 +7,15 @@ function getSequences(game, type) {
 }
 
 export async function run({ jid, user, game, state }) {
+  if (process.env.CODING_ENV === "DEV") {
+    state.introDone = true;
+    state.tutorialDone = true;
+    await sendText(
+      jid,
+      "Developer mode: skipping intro/tutorial. Jump into the game!"
+    );
+    return;
+  }
   if (!state.flow?.active) {
     await sendText(jid, "Nothing to continue.");
     return;

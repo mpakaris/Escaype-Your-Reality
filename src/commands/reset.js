@@ -39,5 +39,15 @@ export async function run({ jid, user, game, state }) {
   ensureFlags(state);
   ensureCounters(state);
 
-  await sendText(jid, "Game reset. Type */next* to begin.");
+  let message = "Game reset. Type */next* to begin.";
+  if (process.env.CODING_ENV === "DEV") {
+    state.flags.introDone = true;
+    state.flags.tutorialDone = true;
+    state.introActive = false;
+    state.flow = { active: false };
+    state.chapter = 1;
+    message = "Game reset. DEV mode active. Type */move <id>* to start.";
+  }
+
+  await sendText(jid, message);
 }

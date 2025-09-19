@@ -44,7 +44,6 @@ router.post("/", async (req, res) => {
   try {
     // ACK fast
     res.status(200).json({ received: true });
-
     // Debug: dump headers and body once you reproduce
     // console.log("WEBHOOK HEADERS:", req.headers);
     // console.log("WEBHOOK RAW BODY:", JSON.stringify(req.body));

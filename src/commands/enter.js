@@ -1,4 +1,6 @@
-import { sendImage, sendText } from "../services/whinself.js";
+import { onEnter as runOnEnter } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
+import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 
 function getCurrentLocation(game, state) {
@@ -11,17 +13,12 @@ function findEnterableAtLocation(loc) {
   return all.filter((s) => s && s.enterable);
 }
 
-function pickRandom(arr = []) {
-  if (!Array.isArray(arr) || !arr.length) return null;
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 export async function run({ jid, user, game, state, args }) {
   // already inside?
   if (state.inStructure && state.structureId) {
     await sendText(
       jid,
-      game.ui?.templates?.alreadyInside || "You are already inside."
+      tpl(game?.ui, "enter.alreadyInside") || "You are already inside."
     );
     return;
   }
@@ -30,14 +27,17 @@ export async function run({ jid, user, game, state, args }) {
   if (!loc) {
     await sendText(
       jid,
-      game.ui?.templates?.whereAmI || "You are nowhere. Use /move."
+      tpl(game?.ui, "enter.whereAmI") || "You are nowhere. Use /move."
     );
     return;
   }
 
   const enterables = findEnterableAtLocation(loc);
   if (!enterables.length) {
-    await sendText(jid, "No enterable buildings here.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "enter.noneHere") || "No enterable buildings here."
+    );
     return;
   }
 
@@ -45,13 +45,11 @@ export async function run({ jid, user, game, state, args }) {
   const token = args && args.length ? args.join(" ") : "";
   if (!token) {
     const names = enterables.map((s) => `*${s.displayName}*`).join(", ");
-    await sendText(
-      jid,
-      `Enter which building? ${names}\nExample: */enter ${enterables[0].displayName
-        .split(" ")
-        .pop()
-        .toLowerCase()}*`
-    );
+    const example = enterables[0].displayName.split(" ").pop().toLowerCase();
+    const msg =
+      tpl(game?.ui, "enter.whichOne", { names, example }) ||
+      `Enter which building? ${names}\nExample: */enter ${example}*`;
+    await sendText(jid, msg);
     return;
   }
 
@@ -62,7 +60,11 @@ export async function run({ jid, user, game, state, args }) {
   const target = hit?.obj || null;
   if (!target) {
     const names = enterables.map((s) => `*${s.displayName}*`).join(", ");
-    await sendText(jid, `No such building here. Try one of: ${names}`);
+    await sendText(
+      jid,
+      tpl(game?.ui, "enter.notFound", { names }) ||
+        `No such building here. Try one of: ${names}`
+    );
     return;
   }
 
@@ -71,32 +73,15 @@ export async function run({ jid, user, game, state, args }) {
   state.structureId = target.id;
   state.roomId = "main";
 
-  // Message 1: confirmation
+  // Confirmation
   const confirmTpl =
-    game.ui?.templates?.enterConfirmed || "You slip inside *{structure}*.";
-  await sendText(
-    jid,
-    confirmTpl.replace("{structure}", target.displayName || target.id)
-  );
+    tpl(game?.ui, "enter.confirmed", {
+      structure: target.displayName || target.id,
+    }) || `You slip inside *${target.displayName || target.id}*.`;
+  await sendText(jid, confirmTpl);
 
-  // Message 2: a random onEnter line if present
-  const onEnter = Array.isArray(target.onEnter) ? target.onEnter : [];
-  const narratorLines = onEnter
-    .filter((s) => s && s.type === "narrator" && s.text)
-    .map((s) => s.text);
-  const line = pickRandom(narratorLines);
-  if (line) {
-    await sendText(jid, line);
-  }
-
-  // Message 3: on-enter image if provided by the structure
-  if (target.onEnterImage) {
-    try {
-      await sendImage(
-        jid,
-        String(target.onEnterImage),
-        target.displayName || target.id || ""
-      );
-    } catch {}
-  }
+  // Declarative onEnter effects from the cartridge (texts, media, flags, etc.)
+  try {
+    await runOnEnter({ jid, user, game, state }, target);
+  } catch {}
 }

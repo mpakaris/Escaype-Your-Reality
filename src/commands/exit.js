@@ -1,126 +1,54 @@
-import { endSequence } from "../game/flow.js";
-import { sendImage, sendText } from "../services/whinself.js";
+import { runEntityHook } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
+import { sendText } from "../services/whinself.js";
 
-function getSequences(game, type) {
-  const buckets = game.sequences || {};
-  return buckets[type] || [];
-}
-
-function clearActiveNpc(state) {
-  if (state && Object.prototype.hasOwnProperty.call(state, "activeNpc")) {
-    delete state.activeNpc;
+function findStructure(game, id) {
+  if (!id) return null;
+  const pools = [
+    game?.structures,
+    game?.catalogue?.structures,
+    game?.structure_catalogue,
+  ].filter(Boolean);
+  for (const list of pools) {
+    const hit = Array.isArray(list) ? list.find((s) => s?.id === id) : null;
+    if (hit) return hit;
   }
+  return null;
 }
 
-function markRecapsOnExit(state) {
-  if (!state || !state.npcTalk) return;
-  for (const [npcId, talk] of Object.entries(state.npcTalk)) {
-    if (talk && talk.revealed === true) {
-      talk.recapAvailable = true;
-    }
-  }
-}
+export default async function exitCmd(ctx /* { jid, game, state } */) {
+  const { jid, game, state } = ctx;
+  if (process?.env?.NODE_ENV !== "production")
+    console.log("[exit] handler invoked", {
+      inStructure: state?.inStructure,
+      structureId: state?.structureId,
+    });
 
-async function sendExitToStreetSet(jid, game, state) {
-  const loc = state?.location
-    ? (game.locations || []).find((l) => l.id === state.location)
-    : null;
-
-  let emitted = false;
-  if (loc) {
-    if (loc.onExitImage) {
-      try {
-        await sendImage(jid, String(loc.onExitImage), loc.name || "");
-        emitted = true;
-      } catch {}
-    }
-    if (Array.isArray(loc.onExit)) {
-      for (const line of loc.onExit) {
-        if (line && line.text) {
-          await sendText(jid, line.text);
-          emitted = true;
-        }
-      }
-    }
-    if (emitted) return;
-  }
-
-  // Fallback if no dedicated exit content
-  await sendText(jid, game.ui?.templates?.whereToNext || "Where to next?");
-}
-
-export async function run({ jid, user, game, state }) {
-  // MODE 1: if intro sequence is active, /exit finishes intro at the end only
-  if (state.flow?.active && state.flow.type === "intro") {
-    const sequences = getSequences(game, "intro");
-    const atEnd = (state.flow.seq || 0) >= sequences.length;
-    if (!atEnd) {
-      await sendText(jid, "Finish the introduction first. Use /next.");
-      return;
-    }
-
-    endSequence(state);
-    state.flags = state.flags || {};
-    state.flags.introSequenceSeen = true;
-
-    const start = game.special?.start;
-    if (start) {
-      state.location = start.place || null;
-      state.inStructure = !!start.inStructure;
-      state.structureId = start.inStructure ? start.place : null;
-      if (typeof start.pendingChapterOnExit === "number")
-        state.chapter = start.pendingChapterOnExit - 1;
-    }
-
-    clearActiveNpc(state);
-    markRecapsOnExit(state);
-
-    await sendExitToStreetSet(jid, game, state);
+  if (!state?.inStructure || !state?.structureId) {
+    await sendText(
+      jid,
+      tpl(game?.ui, "exit.alreadyOutside") || "You are already outside."
+    );
     return;
   }
 
-  // MODE 2: if already inside a structure, /exit returns to the street (same intersection)
-  if (state.inStructure) {
-    const loc = state?.location
-      ? (game.locations || []).find((l) => l.id === state.location)
-      : null;
-    const struct =
-      loc && state?.structureId
-        ? (loc.structures || []).find((s) => s.id === state.structureId)
-        : null;
+  const struct = findStructure(game, state.structureId);
 
-    // Clear structure state
-    state.inStructure = false;
-    state.structureId = null;
-    state.roomId = null;
-
-    clearActiveNpc(state);
-    markRecapsOnExit(state);
-
-    // Prefer structure-level onExit content if present
-    if (struct && (struct.onExitImage || Array.isArray(struct.onExit))) {
-      if (struct.onExitImage) {
-        try {
-          await sendImage(
-            jid,
-            String(struct.onExitImage),
-            struct.displayName || struct.id || ""
-          );
-        } catch {}
-      }
-      if (Array.isArray(struct.onExit)) {
-        for (const line of struct.onExit) {
-          if (line && line.text) await sendText(jid, line.text);
-        }
-      }
-      return;
-    }
-
-    // Else use location-level exit content
-    await sendExitToStreetSet(jid, game, state);
-    return;
+  // Run data-driven onExit effects if present
+  if (struct) {
+    await runEntityHook(ctx, struct, "onExit");
   }
 
-  // Otherwise nothing to exit
-  await sendText(jid, game.ui?.templates?.whereToNext || "Where to next?");
+  // Clear structure context
+  state.inStructure = false;
+  state.structureId = null;
+  state.roomId = null;
+
+  const name = struct?.displayName || struct?.name || struct?.id || "outside";
+  const msg =
+    struct?.messages?.onExitMessage ||
+    tpl(game?.ui, "exit.toStreet", { structure: name }) ||
+    `You step out of *${name}*.`;
+
+  await sendText(jid, msg);
 }

@@ -90,3 +90,45 @@ export async function sendDocument(jid, url, filename) {
     console.error("whinself doc send error", err.response?.data || err.message);
   }
 }
+
+/**
+ * Generic media sender used by the engine. Accepts a single media ref or an array.
+ * MediaRef: { type: 'video'|'audio'|'image'|'doc', url: string, caption?: string, filename?: string }
+ */
+function _guessFilename(url, fallback) {
+  try {
+    const u = new URL(url);
+    const last = (u.pathname.split("/").pop() || "").trim();
+    return last || fallback || "file";
+  } catch (_) {
+    return fallback || "file";
+  }
+}
+
+export async function sendMedia(jid, media) {
+  const list = Array.isArray(media) ? media : [media];
+  for (const m of list) {
+    if (!m || !m.url) continue;
+    const t = String(m.type || "").toLowerCase();
+    const caption = m.caption || undefined;
+    if (t === "video") {
+      await sendVideo(jid, m.url, caption);
+      continue;
+    }
+    if (t === "audio") {
+      await sendAudio(jid, m.url);
+      continue;
+    }
+    if (t === "image") {
+      await sendImage(jid, m.url, caption);
+      continue;
+    }
+    if (t === "doc") {
+      const name = m.filename || _guessFilename(m.url, "document");
+      await sendDocument(jid, m.url, name);
+      continue;
+    }
+    // Fallback: send URL as text if type is unknown
+    await sendText(jid, m.url);
+  }
+}

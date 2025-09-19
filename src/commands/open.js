@@ -1,7 +1,9 @@
+import { onOpen } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
-import { markRevealed } from "./_helpers/revealed.js";
 import { setFlag } from "./_helpers/flagNormalization.js";
+import { markRevealed } from "./_helpers/revealed.js";
 
 function getLoc(game, state) {
   return (game.locations || []).find((l) => l.id === state.location) || null;
@@ -52,6 +54,10 @@ function nameOfItem(id, itemMap) {
   return (it && (it.displayName || it.name)) || prettyId(id);
 }
 
+function listNames(arr) {
+  return (arr || []).map((o) => `*${o.displayName || o.id}*`).join(", ");
+}
+
 function ensureObjectState(state) {
   if (!state.objects || typeof state.objects !== "object") state.objects = {};
   return state.objects;
@@ -74,19 +80,30 @@ export async function run({
   candidates: candArg,
 }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "Open what? Step inside first with */enter*.");
+    const msg =
+      tpl(game?.ui, "open.notInside") ||
+      "Open what? Step inside first with */enter*.";
+    await sendText(jid, msg);
     return;
   }
   const token = args && args.length ? args.join(" ") : "";
   if (!token) {
-    await sendText(jid, "Open what? Try */open desk* or */open cabinet*.");
+    const msg =
+      tpl(game?.ui, "open.what", {
+        example1: "/open desk",
+        example2: "/open cabinet",
+      }) || "Open what? Try */open desk* or */open cabinet*.";
+    await sendText(jid, msg);
     return;
   }
 
   const loc = getLoc(game, state);
   const struct = getStruct(loc, state);
   if (!struct) {
-    await sendText(jid, "Structure not found.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "open.noStructure") || "Structure not found."
+    );
     return;
   }
 
@@ -147,13 +164,12 @@ export async function run({
   }
 
   if (!obj) {
-    const names = objectsHere
-      .map((o) => `*${o.displayName || o.id}*`)
-      .join(", ");
-    await sendText(
-      jid,
-      names ? `Open what? Here you have: ${names}` : "Nothing here to open."
-    );
+    const names = listNames(objectsHere);
+    const msg = names
+      ? tpl(game?.ui, "open.whichOne", { names }) ||
+        `Open what? Here you have: ${names}`
+      : tpl(game?.ui, "open.noneHere") || "Nothing here to open.";
+    await sendText(jid, msg);
     return;
   }
 
@@ -170,17 +186,20 @@ export async function run({
   const msg = obj.messages || {};
 
   if (!isOpenable) {
-    await sendText(jid, `*${name}* can’t be opened.`);
+    const msgText =
+      msg.openFail ||
+      tpl(game?.ui, "open.notOpenable", { name }) ||
+      `*${name}* can’t be opened.`;
+    await sendText(jid, msgText);
     return;
   }
 
   if (isLocked) {
-    await sendText(
-      jid,
-      msg.openFail ||
-        lock.lockedHint ||
-        `Hmmm, *${name}* seems locked. It will need a key or code.`
-    );
+    const txt = msg.openFail || lock.lockedHint;
+    const fallback =
+      tpl(game?.ui, "open.locked", { name }) ||
+      `Hmmm, *${name}* seems locked. It will need a key or code.`;
+    await sendText(jid, txt || fallback);
     return;
   }
 
@@ -193,11 +212,16 @@ export async function run({
     setObjState(state, obj.id, { opened: true });
     // progression: record opened_object flag on first open
     setFlag(state, `opened_object:${obj.id}`);
+    try {
+      await onOpen({ jid, user, game, state }, obj);
+    } catch {}
   }
 
   const base = msg.openSuccess || `You open the *${name}*.`;
   if (!remaining.length) {
-    await sendText(jid, `${base} It’s empty.`);
+    const emptyMsg =
+      tpl(game?.ui, "open.empty", { name }) || `${base} It’s empty.`;
+    await sendText(jid, emptyMsg);
     return;
   }
 
@@ -207,5 +231,9 @@ export async function run({
   } catch {}
 
   const items = remaining.map((id) => `*${nameOfItem(id, itemMap)}*`);
-  await sendText(jid, `${base}\nInside you find:\n${bullets(items)}`);
+  const list = bullets(items);
+  const foundMsg =
+    tpl(game?.ui, "open.contents", { name, list }) ||
+    `${base}\nInside you find:\n${list}`;
+  await sendText(jid, foundMsg);
 }

@@ -1,7 +1,8 @@
 import { classifyNpcReply } from "../services/api/openai.js";
-import { sendText, sendVideo } from "../services/whinself.js";
-import { isInputTooLong } from "./_helpers/validateInputLength.js";
+import { tpl } from "../services/renderer.js";
+import { sendMedia, sendText } from "../services/whinself.js";
 import { setFlag } from "./_helpers/flagNormalization.js";
+import { isInputTooLong } from "./_helpers/validateInputLength.js";
 
 function norm(s) {
   return String(s || "").trim();
@@ -15,11 +16,31 @@ function pickByType(arr, type) {
   return idx >= 0 ? { index: idx + 1, entry: arr[idx] } : null;
 }
 
-export default async function askCommand({ jid, args, state, candidates }) {
+function sendClipOrText(jid, game, clip, tplKey, fallback) {
+  if (clip && Array.isArray(clip.media) && clip.media.length) {
+    return sendMedia(jid, clip.media);
+  }
+  if (clip?.videoUrl)
+    return sendMedia(jid, { type: "video", url: clip.videoUrl });
+  if (clip?.script) return sendText(jid, clip.script);
+  const text = tpl(game?.ui, tplKey, {}) || fallback;
+  return sendText(jid, text);
+}
+
+export default async function askCommand({
+  jid,
+  args,
+  state,
+  candidates,
+  game,
+}) {
   const question = Array.isArray(args) ? args.join(" ") : args;
 
   if (!question || !question.trim()) {
-    await sendText(jid, "Ask what? Example: */ask Tell me a joke!*");
+    const msg =
+      tpl(game?.ui, "ask.empty", { example: "/ask Tell me a joke!" }) ||
+      "Ask what? Example: */ask Tell me a joke!*";
+    await sendText(jid, msg);
     return;
   }
 
@@ -27,10 +48,10 @@ export default async function askCommand({ jid, args, state, candidates }) {
 
   // Length guard (narrator videos later)
   if (isInputTooLong(q)) {
-    await sendText(
-      jid,
-      "Your question to the NPC is too long. Is there any way you could abbreviate your question?"
-    );
+    const msg =
+      tpl(game?.ui, "ask.tooLong") ||
+      "Your question to the NPC is too long. Is there any way you could abbreviate your question?";
+    await sendText(jid, msg);
     return;
   }
 
@@ -40,10 +61,10 @@ export default async function askCommand({ jid, args, state, candidates }) {
   const npc = activeNpcId ? npcIndex[activeNpcId] : null;
 
   if (!npc) {
-    await sendText(
-      jid,
-      "No active conversation partner selected.\n\n> Use */show people* to see who's here.\n\n> Use */talkto <name>* to choose a person\n\n> Then */ask <question>* to talk."
-    );
+    const msg =
+      tpl(game?.ui, "ask.noActiveNpc") ||
+      "No active conversation partner selected.\n\n> Use */show people* to see who's here.\n\n> Use */talkto <name>* to choose a person\n\n> Then */ask <question>* to talk.";
+    await sendText(jid, msg);
     return;
   }
 
@@ -65,7 +86,8 @@ export default async function askCommand({ jid, args, state, candidates }) {
       : [],
   };
 
-  const cap = 5; // questions per visit
+  const cap = Number.isFinite(npc?.askCap) ? npc.askCap : 5; // questions per visit
+  const truthAt = Number.isFinite(npc?.truthAt) ? npc.truthAt : cap; // when to force clue
   const chapter = state.chapter || 1;
 
   // Re-open on higher chapter
@@ -94,13 +116,13 @@ export default async function askCommand({ jid, args, state, candidates }) {
   if (talk.recapAwaitingAsk && (talk.asked || 0) === 0) {
     const forced = pickByType(fallback, "forcedClue");
     const clip = forced?.entry;
-    if (clip?.videoUrl) {
-      await sendVideo(jid, clip.videoUrl);
-    } else if (clip?.script) {
-      await sendText(jid, clip.script);
-    } else {
-      await sendText(jid, "I already told you what I heard.");
-    }
+    await sendClipOrText(
+      jid,
+      game,
+      clip,
+      "ask.recapDefault",
+      "I already told you what I heard."
+    );
 
     // mark progression: truth unlocked for this NPC
     setFlag(state, `truth_unlocked_npc:${activeNpcId}`);
@@ -131,13 +153,13 @@ export default async function askCommand({ jid, args, state, candidates }) {
   if (talk.asked >= cap || talk.closed) {
     const stone = pickByType(fallback, "stonewall");
     const sclip = stone?.entry;
-    if (sclip?.videoUrl) {
-      await sendVideo(jid, sclip.videoUrl);
-    } else if (sclip?.script) {
-      await sendText(jid, sclip.script);
-    } else {
-      await sendText(jid, "I have nothing more to say about this.");
-    }
+    await sendClipOrText(
+      jid,
+      game,
+      sclip,
+      "ask.stonewallDefault",
+      "I have nothing more to say about this."
+    );
     state.npcTalk[activeNpcId] = {
       ...state.npcTalk[activeNpcId],
       asked: talk.asked + 1,
@@ -154,22 +176,19 @@ export default async function askCommand({ jid, args, state, candidates }) {
 
   const askedSoFar = talk.asked || 0;
 
-  // Force the real clue on the last allowed turn if not yet revealed
-  if (askedSoFar >= cap - 1 && !talk.revealed) {
+  // Force the real clue when reaching truthAt if not yet revealed
+  if (askedSoFar + 1 >= truthAt && !talk.revealed) {
     // Prefer scripted clue if present, else forced fallback
     const cluePick =
       pickByType(scripted, "clue") || pickByType(fallback, "forcedClue");
     const clip = cluePick?.entry;
-    if (clip?.videoUrl) {
-      await sendVideo(jid, clip.videoUrl);
-    } else if (clip?.script) {
-      await sendText(jid, clip.script);
-    } else {
-      await sendText(
-        jid,
-        "I heard two men fighting; one ran off in a white coat. That's all I know."
-      );
-    }
+    await sendClipOrText(
+      jid,
+      game,
+      clip,
+      "ask.defaultClue",
+      "I heard two men fighting; one ran off in a white coat. That's all I know."
+    );
 
     // mark progression: truth unlocked for this NPC
     setFlag(state, `truth_unlocked_npc:${activeNpcId}`);
@@ -204,7 +223,7 @@ export default async function askCommand({ jid, args, state, candidates }) {
     .filter(Boolean)
     .slice(-1);
 
-  const allowClue = askedSoFar >= cap - 1 || !!talk.revealed; // never before last turn if not revealed
+  const allowClue = askedSoFar + 1 >= truthAt || !!talk.revealed; // never before threshold if not revealed
 
   let cls;
   try {
@@ -232,13 +251,7 @@ export default async function askCommand({ jid, args, state, candidates }) {
   const chosenIndex = cls?.index && scripted[cls.index - 1] ? cls.index : 1;
   const chosen = scripted[chosenIndex - 1] || null;
 
-  if (chosen?.videoUrl) {
-    await sendVideo(jid, chosen.videoUrl);
-  } else if (chosen?.script) {
-    await sendText(jid, chosen.script);
-  } else {
-    await sendText(jid, "…");
-  }
+  await sendClipOrText(jid, game, chosen, "ask.ellipsis", "…");
 
   // Update state
   const newHist = (talk.history || [])

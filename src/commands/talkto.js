@@ -1,4 +1,6 @@
-import { sendImage, sendText, sendVideo } from "../services/whinself.js";
+import { onTalk } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
+import { sendMedia, sendText } from "../services/whinself.js";
 import { setFlag } from "./_helpers/flagNormalization.js";
 
 function norm(s) {
@@ -17,6 +19,26 @@ function getCurrentStructure(loc, state) {
 function getCurrentRoom(structure, state) {
   if (!structure) return null;
   return (structure.rooms || []).find((r) => r.id === state.roomId) || null;
+}
+
+function npcMediaRefs(target) {
+  const refs = [];
+  const narr = target?.profile?.narrator || {};
+  if (narr.intro?.videoUrl)
+    refs.push({ type: "video", url: narr.intro.videoUrl });
+  // Prefer headshot, then fullBody, then generic image
+  const imgUrl =
+    target?.profile?.images?.headshot ||
+    target?.profile?.images?.fullBody ||
+    target?.profile?.image ||
+    null;
+  if (imgUrl)
+    refs.push({
+      type: "image",
+      url: imgUrl,
+      caption: target.displayName || target.name || target.id,
+    });
+  return refs;
 }
 
 // Evaluate generic conditions (flags, !flags, hasItem)
@@ -48,7 +70,10 @@ function condOk(conds, state) {
 
 export async function run({ jid, user, game, state, args, candidates }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "You are not inside a building. Use /enter first.");
+    const msg =
+      tpl(game?.ui, "talkto.notInside") ||
+      "You are not inside a building. Use /enter first.";
+    await sendText(jid, msg);
     return;
   }
 
@@ -56,7 +81,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
   const structure = getCurrentStructure(loc, state);
   const room = getCurrentRoom(structure, state);
   if (!structure || !room) {
-    await sendText(jid, "No one here to talk to.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "talkto.noneHere") || "No one here to talk to."
+    );
     return;
   }
 
@@ -71,7 +99,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
   const visibleNpcs = visibleIds.map((id) => npcIndex[id]).filter(Boolean);
 
   if (!visibleNpcs.length) {
-    await sendText(jid, "No one here to talk to.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "talkto.noneHere") || "No one here to talk to."
+    );
     return;
   }
 
@@ -111,7 +142,11 @@ export async function run({ jid, user, game, state, args, candidates }) {
       const names = visibleNpcs
         .map((n) => `*${n.displayName || n.name || n.id}*`)
         .join(", ");
-      await sendText(jid, `Talk to who? Try: ${names}`);
+      await sendText(
+        jid,
+        tpl(game?.ui, "talkto.whichOne", { names }) ||
+          `Talk to who? Try: ${names}`
+      );
       return;
     } else {
       const names = visibleNpcs
@@ -119,7 +154,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
         .join(", ");
       await sendText(
         jid,
-        names ? `Couldn't find them. Try: ${names}` : "No one here to talk to."
+        names
+          ? tpl(game?.ui, "talkto.notFound", { names }) ||
+              `Couldn't find them. Try: ${names}`
+          : tpl(game?.ui, "talkto.noneHere") || "No one here to talk to."
       );
       return;
     }
@@ -162,10 +200,16 @@ export async function run({ jid, user, game, state, args, candidates }) {
     }
     await sendText(
       jid,
-      `${
-        target.displayName || target.name || target.id
-      } is set as active conversation partner.`
+      tpl(game?.ui, "talkto.active", {
+        name: target.displayName || target.name || target.id,
+      }) ||
+        `${
+          target.displayName || target.name || target.id
+        } is set as active conversation partner.`
     );
+    try {
+      await onTalk({ jid, user, game, state }, target);
+    } catch {}
     return;
   }
 
@@ -182,34 +226,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
 
   if (!alreadyMet) {
     // First contact
-    const narr = target?.profile?.narrator || {};
-    if (narr.intro?.videoUrl) {
+    const refs = npcMediaRefs(target);
+    if (refs.length) {
       try {
-        await sendVideo(jid, narr.intro.videoUrl);
-      } catch {}
-    }
-    let imgUrl = null;
-    if (narr.intro?.image === "fullBody" && target.profile?.images?.fullBody) {
-      imgUrl = target.profile.images.fullBody;
-    } else if (
-      narr.intro?.image === "headshot" &&
-      target.profile?.images?.headshot
-    ) {
-      imgUrl = target.profile.images.headshot;
-    } else {
-      imgUrl =
-        target.profile?.images?.headshot ||
-        target.profile?.images?.fullBody ||
-        target.profile?.image ||
-        null;
-    }
-    if (imgUrl) {
-      try {
-        await sendImage(
-          jid,
-          imgUrl,
-          target.displayName || target.name || target.id
-        );
+        await sendMedia(jid, refs);
       } catch {}
     }
     talk.firstMet = true;
@@ -219,25 +239,19 @@ export async function run({ jid, user, game, state, args, candidates }) {
     talk.lastVisitAt = Date.now();
   } else {
     // Re-contact, not firstMet
-    if (talk.revealed && talk.recapAvailable) {
-      talk.recapAwaitingAsk = true;
-    }
-    const narr = target.profile.narrator || {};
-    if (narr.revisit?.text) {
+    const narr = target.profile?.narrator || {};
+    if (narr.revisit?.textTpl) {
+      const text = tpl(game?.ui, narr.revisit.textTpl, {
+        name: target.displayName || target.name || target.id,
+      });
+      if (text) await sendText(jid, text);
+    } else if (narr.revisit?.text) {
       await sendText(jid, narr.revisit.text);
     }
-    let imgUrl =
-      target.profile?.images?.headshot ||
-      target.profile?.images?.fullBody ||
-      target.profile?.image ||
-      null;
-    if (imgUrl) {
+    const refs = npcMediaRefs(target);
+    if (refs.length) {
       try {
-        await sendImage(
-          jid,
-          imgUrl,
-          target.displayName || target.name || target.id
-        );
+        await sendMedia(jid, refs);
       } catch {}
     }
     state.npcAskCount =
@@ -252,9 +266,15 @@ export async function run({ jid, user, game, state, args, candidates }) {
     talk.lastVisitAt = Date.now();
     await sendText(
       jid,
-      `${
-        target.displayName || target.name || target.id
-      } is set as active conversation partner.`
+      tpl(game?.ui, "talkto.active", {
+        name: target.displayName || target.name || target.id,
+      }) ||
+        `${
+          target.displayName || target.name || target.id
+        } is set as active conversation partner.`
     );
+    try {
+      await onTalk({ jid, user, game, state }, target);
+    } catch {}
   }
 }

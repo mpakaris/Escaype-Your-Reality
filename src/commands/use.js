@@ -1,6 +1,27 @@
+import { onOpen } from "../services/hooks.js";
+import { tpl } from "../services/renderer.js";
 import { sendText } from "../services/whinself.js";
 import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
 import { setFlag } from "./_helpers/flagNormalization.js";
+
+function pickUseFail(obj, item, ui, fallback) {
+  return (
+    obj?.messages?.useFail ||
+    item?.messages?.useFail ||
+    tpl(ui, "use.nothing") ||
+    fallback ||
+    "Nothing happens."
+  );
+}
+function pickUseSuccess(obj, item, ui, fallback) {
+  return (
+    obj?.messages?.useSuccess ||
+    item?.messages?.useSuccess ||
+    tpl(ui, "use.nothing") ||
+    fallback ||
+    "Nothing happens."
+  );
+}
 
 function normalize(s = "") {
   return s
@@ -29,6 +50,12 @@ function itemDef(game, candidates, id) {
 }
 function objectLabel(o) {
   return o?.displayName || o?.id || "object";
+}
+
+function asIndex(list = []) {
+  const m = Object.create(null);
+  for (const it of list) if (it && it.id) m[it.id] = it;
+  return m;
 }
 
 function prettyLabel(o) {
@@ -95,7 +122,11 @@ function setObjState(state, objId, patch) {
 
 export async function run({ jid, user, game, state, args, candidates }) {
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "Use that where? Step inside first with */enter*.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.notInside") ||
+        "Use that where? Step inside first with */enter*."
+    );
     return;
   }
 
@@ -105,14 +136,39 @@ export async function run({ jid, user, game, state, args, candidates }) {
   const struct = getStruct(loc, state);
   const room = getRoom(struct, state);
   if (!room) {
-    await sendText(jid, "Wrong place for that.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.wrongPlace") || "Wrong place for that."
+    );
     return;
   }
 
-  // Build object candidates (current room only) from catalogue
+  // Build a full catalogue index so we don't lose fields like `lock`
+  const fullMap = asIndex(
+    game?.objects || game?.object_catalogue || game?.catalogue?.objects || []
+  );
+
+  // Build object candidates (current room only) from catalogue and candidates
   const objectMap = candidates?.objectIndex || {};
-  const objectsHereIds = Array.isArray(room.objects) ? room.objects : [];
-  const hereDefs = objectsHereIds.map((oid) => objectMap[oid]).filter(Boolean);
+  const candArray = Array.isArray(candidates?.objects)
+    ? candidates.objects
+    : [];
+  // Normalize room.objects entries to raw IDs (they can be strings or {id})
+  const objectsHereIds = (Array.isArray(room.objects) ? room.objects : [])
+    .map((e) => (typeof e === "string" ? e : e && e.id))
+    .filter(Boolean);
+  let hereDefs = objectsHereIds
+    .map(
+      (oid) =>
+        fullMap[oid] ||
+        objectMap[oid] ||
+        candArray.find((r) => r && r.id === oid)
+    )
+    .filter(Boolean);
+  // Fallback: if the room definition lacks object ids, use candidate objects for this room
+  if (!hereDefs.length && candArray.length) {
+    hereDefs = candArray.slice();
+  }
   const hereEntries = hereDefs.map((o) => ({
     id: o.id,
     label: o.displayName || o.name || o.id,
@@ -138,23 +194,27 @@ export async function run({ jid, user, game, state, args, candidates }) {
   const obj = objHit?.obj || null;
   if (!obj) {
     const names = hereEntries.map((e) => `*${e.label}*`).join(", ");
-    await sendText(
-      jid,
-      names
-        ? `Use it on what? Here you have: ${names}`
-        : "Use it on what? Nothing here."
-    );
+    const msg = names
+      ? tpl(game?.ui, "use.whichOne", { names }) ||
+        `Use it on what? Here you have: ${names}`
+      : tpl(game?.ui, "use.noneHere") || "Use it on what? Nothing here.";
+    await sendText(jid, msg);
     return;
   }
 
   // If the matched object is missing a lock definition in this instance, recover it from catalogue
   let effectiveObj = obj;
-  if (!effectiveObj.lock && objectMap && objectMap[obj.id]?.lock) {
-    effectiveObj = objectMap[obj.id];
+  if (!effectiveObj.lock) {
+    if (objectMap && objectMap[obj.id]?.lock) effectiveObj = objectMap[obj.id];
+    else if (fullMap && fullMap[obj.id]?.lock) effectiveObj = fullMap[obj.id];
   }
 
   if (!itemToken) {
-    await sendText(jid, "Use what? Try */inventory* or */look objects*.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.what") ||
+        "Use what? Try */inventory* or */look objects*."
+    );
     return;
   }
 
@@ -189,7 +249,11 @@ export async function run({ jid, user, game, state, args, candidates }) {
         (getObjState(state, effectiveObj.id).locked ?? lock.locked === true) ===
         false;
       if (alreadyUnlocked) {
-        await sendText(jid, `*${prettyLabel(obj)}* is already unlocked.`);
+        await sendText(
+          jid,
+          tpl(game?.ui, "use.alreadyUnlocked", { name: prettyLabel(obj) }) ||
+            `*${prettyLabel(obj)}* is already unlocked.`
+        );
         return;
       }
       if (codeEquals(itemToken, lock)) {
@@ -199,11 +263,23 @@ export async function run({ jid, user, game, state, args, candidates }) {
         if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
         if (patch.opened === true)
           setFlag(state, `opened_object:${effectiveObj.id}`);
-        const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
+        const ok =
+          lock.onUnlockMsg ||
+          tpl(game?.ui, "use.unlocked", { name: prettyLabel(obj) }) ||
+          `Unlocked ${prettyLabel(obj)}.`;
         await sendText(jid, ok);
+        try {
+          await onOpen({ jid, user, game, state }, effectiveObj);
+        } catch {}
         return;
       } else {
-        const fail = lock.onCodeFail || lock.lockedHint || "Code rejected.";
+        const fail =
+          lock.onCodeFail ||
+          lock.lockedHint ||
+          obj?.messages?.useFail ||
+          item?.messages?.useFail ||
+          tpl(game?.ui, "use.codeFail") ||
+          "Code rejected.";
         await sendText(jid, fail);
         return;
       }
@@ -211,7 +287,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
   }
 
   if (!item || !itemId) {
-    await sendText(jid, "You aren't holding that.");
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.notHolding") || "You aren't holding that."
+    );
     return;
   }
 
@@ -238,12 +317,84 @@ export async function run({ jid, user, game, state, args, candidates }) {
   const isLocked = oState.locked ?? baseLocked;
 
   const lock = effectiveObj.lock || null;
+
+  // BREAKABLE: treat as a special lock that flips to broken=true via specific items
+  if (lock && lock.type === "breakable") {
+    const oState = getObjState(state, effectiveObj.id);
+    const baseBroken = !!lock.broken;
+    const isBroken = oState.broken ?? baseBroken;
+
+    const required = Array.isArray(lock.requiredItems)
+      ? lock.requiredItems
+      : lock.requiredItem
+      ? [lock.requiredItem]
+      : [];
+    const matches = required.length ? required.includes(itemId) : false;
+
+    if (!isBroken) {
+      if (!matches) {
+        const fail =
+          lock.breakFailMsg ||
+          effectiveObj?.messages?.useFail ||
+          item?.messages?.useFail ||
+          tpl(game?.ui, "use.breakFail") ||
+          "That won’t break it.";
+        await sendText(jid, fail);
+        return;
+      }
+      // Break now
+      const patch = { broken: true };
+      if (lock.autoOpenOnUnlock || lock.autoOpenOnBreak) patch.opened = true;
+      setObjState(state, effectiveObj.id, patch);
+      if (patch.opened === true)
+        setFlag(state, `opened_object:${effectiveObj.id}`);
+
+      const ok =
+        lock.onBreakMsg ||
+        effectiveObj?.messages?.openSuccess ||
+        effectiveObj?.messages?.useSuccess ||
+        tpl(game?.ui, "use.broke", { name: prettyLabel(effectiveObj) }) ||
+        `You break *${prettyLabel(effectiveObj)}*.`;
+      await sendText(jid, ok);
+      try {
+        if (patch.opened === true)
+          await onOpen({ jid, user, game, state }, effectiveObj);
+      } catch {}
+      return;
+    }
+
+    // Already broken
+    if (oState.opened ?? !!effectiveObj.states?.opened) {
+      const ok = pickUseSuccess(effectiveObj, item, game?.ui);
+      await sendText(jid, ok);
+    } else {
+      // It’s broken but not marked opened
+      const msg =
+        tpl(game?.ui, "use.unlockedButClosed", {
+          name: prettyLabel(effectiveObj),
+        }) || `*${prettyLabel(effectiveObj)}* is broken but still closed.`;
+      await sendText(jid, msg);
+    }
+    return;
+  }
+
   if (!lock) {
-    const lockable = Array.isArray(obj.tags) && obj.tags.includes("lockable");
+    const tags = Array.isArray(obj.tags) ? obj.tags : [];
+    const usable = tags.includes("usable");
+    if (usable) {
+      const ok = pickUseSuccess(obj, item, game?.ui);
+      await sendText(jid, ok);
+      return;
+    }
+    const lockable = tags.includes("lockable");
     const note = lockable
       ? "looks lockable, but no lock is defined in the cartridge."
       : "doesn’t have a lock.";
-    await sendText(jid, `*${prettyLabel(obj)}* ${note}`);
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.noLock", { name: prettyLabel(obj), note }) ||
+        `*${prettyLabel(obj)}* ${note}`
+    );
     return;
   }
 
@@ -252,8 +403,9 @@ export async function run({ jid, user, game, state, args, candidates }) {
     if (lock.requiredItem) {
       if (lock.requiredItem !== itemId) {
         const fail =
-          lock.lockedHint ||
+          obj?.messages?.useFail ||
           item?.messages?.useFail ||
+          lock.lockedHint ||
           "That mechanism isn’t compatible with this item.";
         await sendText(jid, fail);
         return;
@@ -264,8 +416,14 @@ export async function run({ jid, user, game, state, args, candidates }) {
       if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
       if (patch.opened === true)
         setFlag(state, `opened_object:${effectiveObj.id}`);
-      const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
+      const ok =
+        lock.onUnlockMsg ||
+        tpl(game?.ui, "use.unlocked", { name: prettyLabel(obj) }) ||
+        `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
+      try {
+        await onOpen({ jid, user, game, state }, effectiveObj);
+      } catch {}
       return;
     }
 
@@ -276,7 +434,10 @@ export async function run({ jid, user, game, state, args, candidates }) {
         /key/i.test(item?.name || item?.displayName || "");
       if (!isKey) {
         const fail =
-          lock.lockedHint || item?.messages?.useFail || "That doesn’t fit.";
+          obj?.messages?.useFail ||
+          item?.messages?.useFail ||
+          lock.lockedHint ||
+          "That doesn’t fit.";
         await sendText(jid, fail);
         return;
       }
@@ -286,22 +447,36 @@ export async function run({ jid, user, game, state, args, candidates }) {
       if (lock.onUnlockFlag) setFlag(state, lock.onUnlockFlag, true);
       if (patch.opened === true)
         setFlag(state, `opened_object:${effectiveObj.id}`);
-      const ok = lock.onUnlockMsg || `Unlocked ${prettyLabel(obj)}.`;
+      const ok =
+        lock.onUnlockMsg ||
+        tpl(game?.ui, "use.unlocked", { name: prettyLabel(obj) }) ||
+        `Unlocked ${prettyLabel(obj)}.`;
       await sendText(jid, ok);
+      try {
+        await onOpen({ jid, user, game, state }, effectiveObj);
+      } catch {}
       return;
     }
 
     // Unknown lock types → deny
-    await sendText(jid, lock.lockedHint || "It won’t budge.");
+    await sendText(
+      jid,
+      lock.lockedHint || tpl(game?.ui, "use.locked") || "It won’t budge."
+    );
     return;
   }
 
   // Not locked
   const isOpened = oState.opened ?? baseOpened;
   if (!isOpened && lock) {
-    await sendText(jid, `*${prettyLabel(obj)}* is unlocked but closed.`);
+    await sendText(
+      jid,
+      tpl(game?.ui, "use.unlockedButClosed", { name: prettyLabel(obj) }) ||
+        `*${prettyLabel(obj)}* is unlocked but closed.`
+    );
     return;
   }
 
-  await sendText(jid, "Nothing happens.");
+  const ok = pickUseSuccess(obj, item, game?.ui);
+  await sendText(jid, ok);
 }

@@ -1,213 +1,297 @@
+import { routeIntent } from "../services/api/openai.js";
+import { tpl } from "../services/renderer.js";
 import { sendText } from "../services/whinself.js";
-import { fuzzyPickFromObjects } from "../utils/fuzzyMatch.js";
-import { isRevealed } from "./_helpers/revealed.js";
 import { setFlag } from "./_helpers/flagNormalization.js";
 
-const bullets = (arr) =>
-  (arr || [])
-    .filter(Boolean)
-    .map((t) => `• ${t}`)
-    .join("\n");
-
-function getLoc(game, state) {
-  return (game.locations || []).find((l) => l.id === state.location) || null;
-}
-function getStruct(loc, state) {
-  return (
-    (loc?.structures || []).find((s) => s.id === state.structureId) || null
-  );
-}
-function getRoom(struct, state) {
-  return (struct?.rooms || []).find((r) => r.id === state.roomId) || null;
-}
-
-// maps from engine candidates, with fallbacks
-const asIndex = (v) => {
-  if (!v) return {};
-  if (Array.isArray(v)) {
-    const idx = Object.create(null);
-    for (const r of v) if (r && r.id) idx[r.id] = r;
-    return idx;
-  }
-  return v;
-};
-const getMap = (cands, key) => {
-  const c = cands || {};
-  if (key === "objects")
-    return asIndex(c.objectIndex || c.objectsIndex || c.objects);
-  if (key === "items") return asIndex(c.itemIndex || c.itemsIndex || c.items);
-  if (key === "npcs") return asIndex(c.npcIndex || c.npcsIndex || c.npcs);
-  return asIndex(c[`${key}Index`] || c[key]);
-};
-
-const prettyId = (s) =>
+const norm = (s) =>
   String(s || "")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ")
     .toLowerCase()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
+    .trim();
+const tokenize = (s) =>
+  norm(s)
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
 
-function itemDisplayFromMap(itemMap, id) {
-  const it = itemMap[id];
-  return (it && (it.displayName || it.name)) || prettyId(id);
-}
+const asIndex = (arr) => {
+  const m = Object.create(null);
+  for (const x of Array.isArray(arr) ? arr : []) if (x && x.id) m[x.id] = x;
+  return m;
+};
 
-function ensureObjectState(state) {
-  if (!state.objects || typeof state.objects !== "object") state.objects = {};
-  return state.objects;
-}
-function getObjState(state, objId) {
-  ensureObjectState(state);
-  return state.objects[objId] || {};
-}
+const prettyLabel = (def, id) =>
+  def?.displayName || def?.name || String(id).replace(/[_-]+/g, " ");
 
-export async function run({ jid, game, state, args, candidates: candArg }) {
+export async function run({ jid, game, state, args, candidates: preloaded }) {
+  // minimal guards
   if (!state.inStructure || !state.structureId) {
-    await sendText(jid, "You’re not inside. Step in first with */enter*.");
-    return;
-  }
-
-  const token = args && args.length ? args.join(" ") : "";
-  if (!token) {
-    await sendText(jid, "Take what? Example: */take key*.");
-    return;
-  }
-
-  const loc = getLoc(game, state);
-  const struct = getStruct(loc, state);
-  const room = getRoom(struct, state);
-  if (!struct || !room) {
-    await sendText(jid, "You’re nowhere useful to take anything.");
-    return;
-  }
-
-  // candidate maps
-  const candidates = candArg || game?.candidates || {};
-  let objectMap = getMap(candidates, "objects");
-  let itemMap = getMap(candidates, "items");
-  if (!objectMap || !Object.keys(objectMap).length) {
-    objectMap = asIndex(
-      game?.objects || game?.object_catalogue || game?.catalogue?.objects || []
+    await sendText(
+      jid,
+      tpl(game?.ui, "take.notInside") || "You’re not inside. Use */enter*."
     );
-  }
-  if (!itemMap || !Object.keys(itemMap).length) {
-    itemMap = asIndex(
-      game?.items || game?.item_catalogue || game?.catalogue?.items || []
-    );
+    return;
   }
 
-  const inv = Array.isArray(state.inventory) ? state.inventory : [];
-
-  // Build candidates **in current room** only, respecting lock/open states
-  const sources = new Map(); // id -> { type: 'room'|'object', room, object? }
-  const candidateIds = new Set();
-
-  // room-floor items
-  const roomItems = Array.isArray(room.items) ? room.items : [];
-  for (const it of roomItems) {
-    if (inv.includes(it) || !isRevealed(state, it)) continue;
-    candidateIds.add(it);
-    if (!sources.has(it)) sources.set(it, { type: "room", room });
+  const loc = (game.locations || []).find((l) => l.id === state.location);
+  const struct = (loc?.structures || []).find(
+    (s) => s.id === state.structureId
+  );
+  const room = (struct?.rooms || []).find((r) => r.id === state.roomId);
+  if (!room) {
+    await sendText(jid, tpl(game?.ui, "take.nowhere") || "Nowhere to take.");
+    return;
   }
 
-  // container contents if unlocked + opened
-  const objectIds = Array.isArray(room.objects) ? room.objects : [];
-  for (const oid of objectIds) {
+  const itemMap =
+    (preloaded && preloaded.itemIndex) ||
+    asIndex(game?.items || game?.catalogue?.items || []);
+  const objectMap =
+    (preloaded && preloaded.objectIndex) ||
+    asIndex(game?.objects || game?.catalogue?.objects || []);
+  const inv = (state.inventory = Array.isArray(state.inventory)
+    ? state.inventory
+    : []);
+
+  // Collect simple available items:
+  // 1) room.items
+  const sources = new Map(); // itemId -> { type: 'room'|'object', object? }
+  const labels = new Map(); // itemId -> Set<string>
+
+  const add = (id, src) => {
+    if (!id) return;
+    if (!sources.has(id)) sources.set(id, src);
+    if (!labels.has(id)) {
+      const def = itemMap[id] || { id };
+      const lset = new Set([
+        ...tokenize(def.id),
+        ...tokenize(def.displayName || def.name || ""),
+      ]);
+      labels.set(id, lset);
+    }
+  };
+
+  for (const it of Array.isArray(room.items) ? room.items : []) {
+    const iid = typeof it === "string" ? it : it?.id;
+    add(iid, { type: "room" });
+  }
+
+  // Prefer items from the last searched container if present
+  const focusId = state?.focus?.containerId;
+  if (focusId && objectMap[focusId]) {
+    const o = objectMap[focusId];
+    const oState = (state.objects && state.objects[o.id]) || {};
+    const opened = !!oState.opened;
+    const broken = !!oState.broken;
+    const hasOpenedState =
+      o?.states && Object.prototype.hasOwnProperty.call(o.states, "opened");
+    const lockType = o?.lock?.type;
+    const accessible = broken || opened || (!hasOpenedState && !lockType);
+    if (accessible) {
+      for (const it of Array.isArray(o.contents) ? o.contents : []) {
+        const iid = typeof it === "string" ? it : it?.id;
+        add(iid, { type: "object", object: o });
+      }
+    }
+  }
+
+  // 2) items inside any objects placed in this room
+  const roomObjectIds = Array.isArray(room.objects) ? room.objects : [];
+  for (const oid of roomObjectIds) {
     const o = objectMap[oid];
     if (!o) continue;
-    const tags = Array.isArray(o.tags) ? o.tags : [];
-    const openable = tags.includes("openable");
-    const lock = o.lock || {};
-    const oState = getObjState(state, o.id);
-    const locked =
-      typeof oState.locked === "boolean" ? oState.locked : !!lock.locked;
-    const openedBase = o.states?.opened === true;
-    const opened =
-      typeof oState.opened === "boolean" ? oState.opened : openedBase;
-    if (locked) continue;
-    if (openable && !opened) continue; // not visible until opened
-    const contents = Array.isArray(o.contents) ? o.contents : [];
-    for (const it of contents) {
-      if (inv.includes(it) || !isRevealed(state, it)) continue;
-      candidateIds.add(it);
-      if (!sources.has(it))
-        sources.set(it, { type: "object", room, object: o });
+
+    // Determine accessibility: include contents if opened or broken. If the object tracks an `opened` state, require it; otherwise allow simple containers with no lock.
+    const lockType = o?.lock?.type;
+    const oState = (state.objects && state.objects[o.id]) || {};
+    const opened = !!oState.opened;
+    const broken = !!oState.broken;
+    const hasOpenedState =
+      o?.states && Object.prototype.hasOwnProperty.call(o.states, "opened");
+    const accessible = broken || opened || (!hasOpenedState && !lockType);
+
+    if (!accessible) continue;
+
+    for (const it of Array.isArray(o.contents) ? o.contents : []) {
+      const iid = typeof it === "string" ? it : it?.id;
+      add(iid, { type: "object", object: o });
     }
   }
 
-  const candList = Array.from(candidateIds);
-  if (!candList.length) {
-    await sendText(jid, "There’s nothing here you can take.");
+  // --- AI context helpers ---
+  const clean = (s) =>
+    String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const nameMap = new Map(); // token -> canonical id
+  const seenItems = new Set();
+  const aiContextItems = [];
+
+  const registerItemName = (id) => {
+    if (!id || seenItems.has(id)) return;
+    seenItems.add(id);
+    const def = itemMap[id] || { id };
+    const label = def.displayName || def.name || id;
+    const keys = new Set([clean(id), ...tokenize(label)]);
+    for (const k of keys) if (k) nameMap.set(k, id);
+    aiContextItems.push(id);
+  };
+
+  // room items
+  for (const it of Array.isArray(room.items) ? room.items : []) {
+    const iid = typeof it === "string" ? it : it?.id;
+    registerItemName(iid);
+  }
+  // focused container items first
+  if (focusId && objectMap[focusId]) {
+    const o = objectMap[focusId];
+    for (const it of Array.isArray(o.contents) ? o.contents : []) {
+      const iid = typeof it === "string" ? it : it?.id;
+      registerItemName(iid);
+    }
+  }
+  // items inside any room objects regardless of locks, for AI intent only
+  for (const oid of Array.isArray(room.objects) ? room.objects : []) {
+    const o = objectMap[oid];
+    if (!o) continue;
+    for (const it of Array.isArray(o.contents) ? o.contents : []) {
+      const iid = typeof it === "string" ? it : it?.id;
+      registerItemName(iid);
+    }
+  }
+
+  const query = norm((args || []).join(" "));
+
+  let candidates = Array.from(sources.keys());
+  if (!candidates.length) {
+    // Fallback: ask AI which item the user likely wanted
+    try {
+      const ai = await routeIntent(`take ${args.join(" ")}`, {
+        commands: ["take"],
+        objects: Array.isArray(room.objects) ? room.objects.map(String) : [],
+        items: aiContextItems,
+        npcs: [],
+      });
+      const wanted = clean(ai?.targetIds?.item || "");
+      const mapped = nameMap.get(wanted) || nameMap.get(query) || null;
+      if (mapped) {
+        // verify presence and accessibility, then add to sources to reuse downstream logic
+        // check room
+        if (
+          Array.isArray(room.items) &&
+          room.items.some((x) => (typeof x === "string" ? x : x?.id) === mapped)
+        ) {
+          sources.set(mapped, { type: "room" });
+          candidates = [mapped];
+        } else {
+          // check objects
+          for (const oid of Array.isArray(room.objects) ? room.objects : []) {
+            const o = objectMap[oid];
+            if (!o) continue;
+            const hasIt = (o.contents || []).some(
+              (x) => (typeof x === "string" ? x : x?.id) === mapped
+            );
+            if (!hasIt) continue;
+            const lockType = o?.lock?.type;
+            const oState = (state.objects && state.objects[o.id]) || {};
+            const opened = !!oState.opened;
+            const broken = !!oState.broken;
+            const hasOpenedState =
+              o?.states &&
+              Object.prototype.hasOwnProperty.call(o.states, "opened");
+            const accessible =
+              broken || opened || (!hasOpenedState && !lockType);
+            if (!accessible) {
+              await sendText(
+                jid,
+                o?.messages?.takeFailMessage ||
+                  tpl(game?.ui, "take.blocked") ||
+                  `You can’t take it from ${prettyLabel(o, o.id)} yet.`
+              );
+              return;
+            }
+            sources.set(mapped, { type: "object", object: o });
+            candidates = [mapped];
+            break;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (!candidates.length) {
+    await sendText(
+      jid,
+      tpl(game?.ui, "take.noneHere") || "There’s nothing here you can take."
+    );
     return;
   }
 
-  // fuzzy resolve
-  const itemsForMatch = candList.map((id) => ({
-    id,
-    label: itemDisplayFromMap(itemMap, id),
-  }));
-  const hit = fuzzyPickFromObjects(token, itemsForMatch, ["id", "label"], {
-    threshold: 0.55,
-    maxResults: 1,
-  });
-  const target = hit?.obj?.id || null;
+  // Pick target
+  let target = null;
+  if (!query && candidates.length === 1) target = candidates[0];
+
+  if (!target && query) {
+    // exact id match
+    for (const id of candidates)
+      if (norm(id) === query) {
+        target = id;
+        break;
+      }
+    // token startsWith or includes on labels
+    if (!target) {
+      for (const id of candidates) {
+        const lab = labels.get(id) || new Set();
+        if (
+          [...lab].some(
+            (t) => t === query || t.startsWith(query) || t.includes(query)
+          )
+        ) {
+          target = id;
+          break;
+        }
+      }
+    }
+  }
 
   if (!target) {
-    const list = bullets(
-      candList.map((id) => `*${itemDisplayFromMap(itemMap, id)}*`)
-    );
+    const list = candidates
+      .map((id) => `• ${prettyLabel(itemMap[id], id)}`)
+      .join("\n");
     await sendText(
       jid,
-      `Couldn’t find that to take. You can pick up:\n${list}`
+      tpl(game?.ui, "take.whichOne", { list }) || `Which one?\n${list}`
     );
     return;
   }
 
-  // validate target is takeable in this context (candidate list)
-  if (!candList.includes(target)) {
-    await sendText(jid, "You can’t stuff that in your pocket.");
-    return;
-  }
-
-  // init inventory
-  state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
-
-  if (state.inventory.includes(target)) {
+  // Already owned?
+  if (inv.includes(target)) {
+    const label = prettyLabel(itemMap[target], target);
     await sendText(
       jid,
-      game.ui?.templates?.alreadyHaveItem || "Already in your inventory."
+      tpl(game?.ui, "take.alreadyHave", { item: label }) ||
+        `You already have ${label}.`
     );
     return;
   }
 
-  // remove from correct source
+  // Remove from source and add to inventory
   const src = sources.get(target);
-  if (src) {
-    if (src.type === "room") {
-      if (Array.isArray(src.room.items)) {
-        src.room.items = src.room.items.filter((x) => x !== target);
-      }
-    } else if (src.type === "object") {
-      if (Array.isArray(src.object.contents)) {
-        src.object.contents = src.object.contents.filter((x) => x !== target);
-      }
-    }
+  if (src?.type === "room" && Array.isArray(room.items)) {
+    room.items = room.items.filter(
+      (x) => (typeof x === "string" ? x : x?.id) !== target
+    );
+  } else if (src?.type === "object" && Array.isArray(src.object.contents)) {
+    src.object.contents = src.object.contents.filter(
+      (x) => (typeof x === "string" ? x : x?.id) !== target
+    );
   }
 
-  // add to inventory
-  state.inventory.push(target);
-  // progression: mark possession flag for content that uses flags instead of inventory checks
+  inv.push(target);
   setFlag(state, `has_item:${target}`);
 
-  const pickedName = itemDisplayFromMap(itemMap, target);
-  const def =
-    itemMap[target] || (game.items || []).find((i) => i.id === target);
-  const custom = def?.messages?.take;
-  if (custom) {
-    await sendText(jid, custom.replace("{item}", pickedName));
-  } else {
-    const confirmTpl = game.ui?.templates?.takeConfirmed || "Taken: {item}.";
-    await sendText(jid, confirmTpl.replace("{item}", pickedName));
-  }
+  const picked = prettyLabel(itemMap[target], target);
+  const msg =
+    tpl(game?.ui, "take.confirmed", { item: picked }) || `Taken: ${picked}.`;
+  await sendText(jid, msg);
 }
